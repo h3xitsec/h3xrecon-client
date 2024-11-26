@@ -2,6 +2,7 @@ from loguru import logger
 from typing import List
 from .config import ClientConfig
 from .database import Database
+from .queue import Queue
 
 class ClientAPI:
     def __init__(self):
@@ -12,6 +13,7 @@ class ClientAPI:
         """
         logger.debug("Initializing ClientAPI")
         self.db = Database()
+        self.queue = Queue()
 
     # Programs related methods
     async def get_programs(self):
@@ -527,13 +529,13 @@ class ClientAPI:
         }
 
         # For URLs, we need to format the data differently
-        await self.qm.connect()
-        await self.qm.publish_message(
+        await self.queue.connect()
+        await self.queue.publish_message(
             subject="recon.data",
             stream="RECON_DATA",
             message=message
         )
-        await self.qm.close()
+        await self.queue.close()
 
     async def remove_item(self, item_type: str, program_name: str, item: str) -> bool:
         """
@@ -561,13 +563,13 @@ class ClientAPI:
             "data": [item]
         }
 
-        await self.qm.connect()
-        await self.qm.publish_message(
+        await self.queue.connect()
+        await self.queue.publish_message(
             subject="recon.data",
             stream="RECON_DATA",
             message=message
         )
-        await self.qm.close()
+        await self.queue.close()
         return True
 
     async def send_job(self, function_name: str, program_name: str, target: str, force: bool):
@@ -583,9 +585,10 @@ class ClientAPI:
         Logs an error if the program does not exist.
         """
         try:
-            program_id = await self.db.get_program_id(program_name)
+            program_id = await self.get_program_id(program_name)
         except Exception as e:
             logger.error(f"Non existent program '{program_name}'")
+            logger.exception(e)
             return
 
         message = {
@@ -595,10 +598,10 @@ class ClientAPI:
             "params": {"target": target}
         }
 
-        await self.qm.connect()
-        await self.qm.publish_message(
+        await self.queue.connect()
+        await self.queue.publish_message(
             subject="function.execute",
             stream="FUNCTION_EXECUTE",
             message=message
         )
-        await self.qm.close()
+        await self.queue.close()

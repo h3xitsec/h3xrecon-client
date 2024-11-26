@@ -71,7 +71,6 @@ class Client:
                         elif result.error:
                             print(f"[!] Error adding CIDR '{cidr}' to program '{program.get('name')}': {result.error}")
                 print("")
-
         
     async def run(self):
         logger.debug("Running Client")
@@ -237,7 +236,7 @@ class Client:
 
         # h3xrecon -p program sendjob
         elif self.arguments.get('sendjob'):
-            await self.send_job(
+            await self.client_api.send_job(
                 function_name=self.arguments['<function>'],
                 program_name=self.arguments['<program>'],
                 target=self.arguments['<target>'],
