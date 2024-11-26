@@ -16,4 +16,4 @@ ENV PYTHONUNBUFFERED=1
 
 ENV PYTHONFAULTHANDLER=1
 
-ENTRYPOINT ["/app/venv/bin/python", "-m", "h3xrecon_client.client"]
+ENTRYPOINT ["/app/venv/bin/python", "-m", "h3xrecon_client.main"]
