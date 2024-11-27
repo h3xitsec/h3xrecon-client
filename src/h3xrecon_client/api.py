@@ -2,7 +2,7 @@ from loguru import logger
 from typing import List
 from .config import ClientConfig
 from .database import Database
-from .queue import Queue
+from .queue import ClientQueue
 
 class ClientAPI:
     def __init__(self):
@@ -13,7 +13,7 @@ class ClientAPI:
         """
         logger.debug("Initializing ClientAPI")
         self.db = Database()
-        self.queue = Queue()
+        self.queue = ClientQueue()
 
     # Programs related methods
     async def get_programs(self):
@@ -510,7 +510,7 @@ class ClientAPI:
         
         Prints an error message if the program is not found.
         """
-        program_id = await self.db.get_program_id(program_name)
+        program_id = await self.get_program_id(program_name)
         if not program_id:
             print(f"Error: Program '{program_name}' not found")
             return
@@ -605,3 +605,4 @@ class ClientAPI:
             message=message
         )
         await self.queue.close()
+    

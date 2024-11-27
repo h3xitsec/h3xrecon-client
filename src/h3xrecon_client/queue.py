@@ -7,7 +7,7 @@ import json
 import asyncio
 from .config import ClientConfig
 
-class Queue:
+class ClientQueue:
     def __init__(self):
         """Initialize the QueueManager without connecting to NATS.
         The actual connection is established when connect() is called.

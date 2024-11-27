@@ -7,6 +7,7 @@ from docopt import docopt
 from tabulate import tabulate
 from loguru import logger
 from .api import ClientAPI
+from .queue import ClientQueue
 from .config import ClientConfig
 
 class Client:
@@ -26,6 +27,7 @@ class Client:
         )
         logger.debug("Initializing Client")
         self.client_api = ClientAPI()
+        self.client_queue = ClientQueue()
 
         # Initialize arguments only if properly parsed by docopt
         if arguments:
@@ -154,19 +156,19 @@ class Client:
                     stream = 'RECON_DATA'
 
                 if self.arguments.get('show'):
-                    result = await self.qm.get_stream_info(stream)
+                    result = await self.client_queue.get_stream_info(stream)
                     headers = result[0].keys()
                     rows = [x.values() for x in result]
                     print(tabulate(rows, headers=headers, tablefmt='grid'))
 
                 elif self.arguments.get('messages'):
-                    result = await self.qm.get_stream_messages(stream)
+                    result = await self.client_queue.get_stream_messages(stream)
                     headers = result[0].keys()
                     rows = [x.values() for x in result]
                     print(tabulate(rows, headers=headers, tablefmt='grid'))
 
                 elif self.arguments.get('flush'):
-                    result = await self.qm.flush_stream(stream)
+                    result = await self.client_queue.flush_stream(stream)
                     print(result)
         
         # h3xrecon -p program add domain/ip/url
@@ -178,7 +180,7 @@ class Client:
                     items = [self.arguments['<item>']]
                 if self.arguments.get('-'):
                     items.extend([u.rstrip() for u in process_stdin()])
-                await self.add_item(item_type, self.arguments['<program>'], items)
+                await self.client_api.add_item(item_type, self.arguments['<program>'], items)
 
         # h3xrecon -p program del domain/ip/url
         elif self.arguments.get('del'):

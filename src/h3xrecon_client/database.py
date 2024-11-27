@@ -29,15 +29,6 @@ class Database:
         # Initialize your database connection here
         logger.debug(f"Database config: {self.config}")
         self.pool = None
-        self.connection = self._connect_to_database()
-
-    def _connect_to_database(self):
-        # Placeholder for actual database connection logic
-        return "DatabaseConnectionObject"
-        
-    def _connect_to_database(self):
-        # Placeholder for actual database connection logic
-        return "DatabaseConnectionObject"
 
     async def __aenter__(self):
         await self.ensure_connected()

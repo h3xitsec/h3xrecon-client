@@ -1,4 +1,4 @@
-name: Build and release h3xrecon module
+name: Build and release H3xRecon Client
 on:
   workflow_dispatch:
   workflow_call:
