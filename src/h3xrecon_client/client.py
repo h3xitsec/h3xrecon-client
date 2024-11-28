@@ -246,6 +246,7 @@ class Client:
             # h3xrecon -p program show domains/ips/urls
             elif self.arguments.get('show'):
                 result = None
+                #if self.arguments['<program>']:
                 # h3xrecon -p program show domains
                 if self.arguments.get('domains'):
                     result = await self.client_api.get_domains(self.arguments['<program>'])
@@ -265,6 +266,26 @@ class Client:
                 # h3xrecon -p program show nuclei
                 elif self.arguments.get('nuclei'):
                     result = await self.client_api.get_nuclei(self.arguments['<program>'], severity=self.arguments['<severity>'])
+                # else:
+                #     # h3xrecon show domains
+                #     if self.arguments.get('domains'):
+                #         result = await self.client_api.get_domains()
+                        
+                #     # h3xrecon show ips
+                #     elif self.arguments.get('ips'):
+                #         result = await self.client_api.get_ips()
+                    
+                #     # h3xrecon show urls
+                #     elif self.arguments.get('urls'):
+                #         result = await self.client_api.get_urls()
+
+                #     # h3xrecon show services
+                #     elif self.arguments.get('services'):
+                #         result = await self.client_api.get_services()
+                    
+                #     # h3xrecon show nuclei
+                #     elif self.arguments.get('nuclei'):
+                #         result = await self.client_api.get_nuclei(severity=self.arguments['<severity>'])
                 
                 # print the results in a table format
                 if result:

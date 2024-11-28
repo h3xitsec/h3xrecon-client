@@ -493,8 +493,9 @@ class ClientAPI:
             """
             if program_name:
                 query += " WHERE p.name = $1"
-            result = await self.db._fetch_records(query, program_name)
-            return result
+                return await self.db._fetch_records(query, program_name)
+            
+            return await self.db._fetch_records(query)
         except Exception as e:
             logger.exception(e)
             return []
