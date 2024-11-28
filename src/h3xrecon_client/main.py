@@ -13,7 +13,7 @@ Usage:
     h3xrecon [ -p <program> ] ( list ) ( domains | ips ) [--resolved] [--unresolved]
     h3xrecon [ -p <program> ] ( list ) ( urls | services ) [--details]
     h3xrecon [ -p <program> ] ( add | del ) ( domain | ip | url ) ( - | <item> )
-    h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( <target> ) [--force]
+    h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( <target> ) [ <extra_param>... ] [--force]
 
 Options:
     -p --program     Program to work on.

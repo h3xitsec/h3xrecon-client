@@ -241,7 +241,10 @@ class Client:
             await self.client_api.send_job(
                 function_name=self.arguments['<function>'],
                 program_name=self.arguments['<program>'],
-                target=self.arguments['<target>'],
+                params={
+                    "target": self.arguments['<target>'],
+                    "extra_params": [a for a in self.arguments['<extra_param>'] if a != "--"]
+                },
                 force=self.arguments['--force']
             )
 
