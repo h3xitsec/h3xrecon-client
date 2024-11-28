@@ -572,14 +572,14 @@ class ClientAPI:
         await self.queue.close()
         return True
 
-    async def send_job(self, function_name: str, program_name: str, target: str, force: bool):
+    async def send_job(self, function_name: str, program_name: str, params: dict, force: bool):
         """
         Send a job to the worker using QueueManager.
         
         Args:
             function_name (str): The name of the function to execute.
             program_name (str): The name of the program associated with the job.
-            target (str): The specific target for the job.
+            params (dict): The parameters for the job.
             force (bool): Whether to force the job execution.
         
         Logs an error if the program does not exist.
@@ -595,7 +595,7 @@ class ClientAPI:
             "force": force,
             "function": function_name,
             "program_id": program_id,
-            "params": {"target": target}
+            "params": params #{"target": target}
         }
 
         await self.queue.connect()
