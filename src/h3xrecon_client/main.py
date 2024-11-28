@@ -3,15 +3,19 @@
 __doc__ = """H3XRecon Client
 
 Usage:
-    h3xrecon ( program ) ( list )
+    h3xrecon ( program ) ( list ) 
     h3xrecon ( program ) ( add | del) ( - | <program> )
     h3xrecon ( program ) ( import ) ( <file> )
+    h3xrecon ( system ) ( queue ) ( show | messages | flush ) ( worker | job | data )
+    h3xrecon ( list | show ) ( domains | ips | urls | services | nuclei )
+    h3xrecon ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
+    h3xrecon ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( config ) ( add | del ) ( cidr | scope ) ( - | <item> )
     h3xrecon [ -p <program> ] ( config ) ( list ) ( cidr | scope )
     h3xrecon [ -p <program> ] ( config ) ( database ) ( drop)
-    h3xrecon ( system ) ( queue ) ( show | messages | flush ) ( worker | job | data )
-    h3xrecon [ -p <program> ] ( list ) ( domains | ips ) [--resolved] [--unresolved]
-    h3xrecon [ -p <program> ] ( list ) ( urls | services ) [--details]
+    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips | urls | services | nuclei )
+    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
+    h3xrecon [ -p <program> ] ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( add | del ) ( domain | ip | url ) ( - | <item> )
     h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( <target> ) [ <extra_param>... ] [--force]
 
@@ -20,7 +24,7 @@ Options:
     --resolved       Show only resolved items.
     --unresolved    Show only unresolved items.
     --force         Force execution of job.
-    --details       Show details about URLs.
+    --severity      Show only nuclei results with the specified severity.
 """
 
 import asyncio
