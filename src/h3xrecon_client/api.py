@@ -281,39 +281,16 @@ class ClientAPI:
         if program_name:
             query = """
         SELECT 
-           *
+           u.url,
+           u.title,
+           u.status_code,
+           u.content_type
         FROM urls u
         JOIN programs p ON u.program_id = p.id
         WHERE p.name = $1
         """
             result = await self.db._fetch_records(query, program_name)
             return result
-    
-    async def get_urls_details(self, program_name: str = None):
-        """
-        Retrieve detailed information about URLs in a program.
-        
-        Args:
-            program_name (str, optional): The name of the program to retrieve URL details for.
-                                          If None, retrieves details from all programs.
-        
-        Returns:
-            A list of URL details including title, status code, technologies, and body preview.
-        """
-        if program_name:
-            query = """
-            SELECT 
-                u.url, 
-                httpx_data->>'title' as title,
-                httpx_data->>'status_code' as status_code,
-                httpx_data->>'tech' as technologies,
-                httpx_data->>'body_preview' as body_preview,
-                p.name as program_name
-            FROM urls u
-            JOIN programs p ON u.program_id = p.id
-            WHERE p.name = $1
-            """
-            return await self.db._fetch_records(query, program_name)
 
     async def get_resolved_domains(self, program_name: str = None):
         """
@@ -436,18 +413,27 @@ class ClientAPI:
         """
         query = """
         SELECT 
-            *
+            d.domain,
+            i.ip as resolved_ip,
+            d.cnames,
+            d.is_catchall,
+            p.name as program
         FROM domains d
         JOIN programs p ON d.program_id = p.id
+        JOIN ips i ON i.id = ANY(d.ips)
         """
-        if program_name:
-            query += """
-            WHERE p.name = $1
-            """
-            result = await self.db._fetch_records(query, program_name)
-        else:
-            result = await self.db._fetch(query)
-        return result
+        try:
+            if program_name:
+                query += """
+                WHERE p.name = $1
+                """
+                result = await self.db._fetch_records(query, program_name)
+            else:
+                result = await self.db._fetch_records(query)
+            return result
+        except Exception as e:
+            logger.exception(e)
+            return []
 
     async def get_services(self, program_name: str = None):
         """
@@ -462,20 +448,28 @@ class ClientAPI:
         """
         query = """
         SELECT 
-            *,
+            s.protocol,
+            i.ip,
+            s.port,
+            s.service,
+            i.ptr,
             p.name as program_name
         FROM services s
         JOIN ips i ON s.ip = i.id
         JOIN programs p ON s.program_id = p.id
         """
-        if program_name:
-            query += """
-            WHERE p.name = $1
-            """
-            result = await self.db._fetch_records(query, program_name)
-        else:
-            result = await self.db._fetch_records(query)
-        return result
+        try:
+            if program_name:
+                query += """
+                WHERE p.name = $1
+                """
+                result = await self.db._fetch_records(query, program_name)
+            else:
+                result = await self.db._fetch_records(query)
+            return result
+        except Exception as e:
+            logger.exception(e)
+            return []
 
     async def get_ips(self, program_name: str = None):
         """
@@ -488,16 +482,50 @@ class ClientAPI:
         Returns:
             A list of IP addresses associated with the specified program or all programs.
         """
-        if program_name:
+        try:
             query = """
             SELECT 
-                *
+                ip,
+                ptr,
+                p.name as program
             FROM ips i
             JOIN programs p ON i.program_id = p.id
-            WHERE p.name = $1
             """
+            if program_name:
+                query += " WHERE p.name = $1"
             result = await self.db._fetch_records(query, program_name)
             return result
+        except Exception as e:
+            logger.exception(e)
+            return []
+    
+    async def get_nuclei(self, program_name: str = None, severity: str = None):
+        """
+        Retrieve nuclei results for a specific program or all programs.
+        
+        Args:
+            program_name (str, optional): The name of the program to retrieve nuclei results for.
+                                          If None, retrieves nuclei results from all programs.
+            severity (str, optional): The severity of the nuclei results to retrieve.
+                                          If None, retrieves nuclei results from all severities.
+        
+        Returns:
+            A list of nuclei results associated with the specified program or all programs.
+        """
+        query = """
+        SELECT 
+            url, template_id, severity
+        FROM nuclei n
+        JOIN programs p ON n.program_id = p.id
+        """
+        if program_name:
+            query += " WHERE p.name = $1"
+        if severity:
+            query += " AND severity = $2"
+            result = await self.db._fetch_records(query, program_name, severity)
+        else:
+            result = await self.db._fetch_records(query, program_name)
+        return result
     
     async def add_item(self, item_type: str, program_name: str, items: list):
         """
