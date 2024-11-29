@@ -60,7 +60,7 @@ omit = [
 ]
 
 [project.scripts]
-h3xrecon-client = "h3xrecon_client.client:main"
+h3xrecon = "h3xrecon_client.main:main"
 
 [tool.coverage.paths]
 h3xrecon_client = ["src/h3xrecon_client", "*/h3xrecon-client/src/h3xrecon_client"]
