@@ -17,7 +17,7 @@ Usage:
     h3xrecon [ -p <program> ] ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
     h3xrecon [ -p <program> ] ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( add | del ) ( domain | ip | url ) ( - | <item> )
-    h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( <target> ) [ <extra_param>... ] [--force]
+    h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( - | <target> ) [ <extra_param>... ] [--force]
 
 Options:
     -p --program     Program to work on.
