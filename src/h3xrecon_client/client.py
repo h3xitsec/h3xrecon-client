@@ -281,15 +281,22 @@ class Client:
 
             # h3xrecon -p program sendjob
             elif self.arguments.get('sendjob'):
-                await self.client_api.send_job(
-                    function_name=self.arguments['<function>'],
-                    program_name=self.arguments['<program>'],
-                    params={
-                        "target": self.arguments['<target>'],
-                        "extra_params": [a for a in self.arguments['<extra_param>'] if a != "--"]
-                    },
-                    force=self.arguments['--force']
-                )
+                targets = []
+                if isinstance(self.arguments['<target>'], str):
+                    targets = [self.arguments['<target>']]
+                if self.arguments.get('-'):
+                    targets.extend([u.rstrip() for u in process_stdin()])
+                print(targets)
+                for target in targets:
+                    await self.client_api.send_job(
+                        function_name=self.arguments['<function>'],
+                        program_name=self.arguments['<program>'],
+                        params={
+                            "target": target,
+                            "extra_params": [a for a in self.arguments['<extra_param>'] if a != "--"]
+                        },
+                        force=self.arguments['--force']
+                    )
 
             else:
                 raise ValueError("No valid argument found")
