@@ -414,13 +414,12 @@ class ClientAPI:
         query = """
         SELECT 
             d.domain,
-            i.ip as resolved_ip,
+            (SELECT ip FROM ips WHERE id = ANY(d.ips) LIMIT 1) as resolved_ip,
             d.cnames,
             d.is_catchall,
             p.name as program
         FROM domains d
         JOIN programs p ON d.program_id = p.id
-        JOIN ips i ON i.id = ANY(d.ips)
         """
         try:
             if program_name:

@@ -206,7 +206,7 @@ class Client:
                         [print(r['domain']) for r in domains.data]
                     else:
                         domains = await self.client_api.get_domains(self.arguments['<program>'])
-                        [print(r['domain']) for r in domains.data]
+                        [print(r.get("domain")) for r in domains.data]
 
                 # h3xrecon -p program list ips
                 elif self.arguments.get('ips'):
@@ -286,7 +286,6 @@ class Client:
                     targets = [self.arguments['<target>']]
                 if self.arguments.get('-'):
                     targets.extend([u.rstrip() for u in process_stdin()])
-                print(targets)
                 for target in targets:
                     await self.client_api.send_job(
                         function_name=self.arguments['<function>'],
