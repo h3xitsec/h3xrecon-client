@@ -106,7 +106,12 @@ class Client:
                     for i in items:
                         result = await self.client_api.remove_program(i)
                         if result.success:
-                            print(f"Program '{i}' removed successfully")
+                            if result.data == "DELETE 1":
+                                print(f"Program '{i}' removed successfully")
+                            elif result.data == "DELETE 0":
+                                print(f"Program '{i}' not found")
+                        elif result.error:
+                            print(f"Error removing program '{i}': {result.error}")
 
                 # h3xrecon program import
                 elif self.arguments.get('import'):
@@ -146,7 +151,13 @@ class Client:
             
             # h3xrecon system
             elif self.arguments.get('system'):
-
+                # h3xrecon system cache
+                if self.arguments.get('cache'):
+                    if self.arguments.get('flush'):
+                        await self.client_api.flush_cache()
+                    elif self.arguments.get('show'):
+                        keys = await self.client_api.show_cache_keys_values()
+                        [print(k) for k in keys]
                 # h3xrecon system queue
                 if self.arguments.get('queue'):
                     if self.arguments['worker']:
@@ -200,25 +211,43 @@ class Client:
                 if self.arguments.get('domains'):
                     if self.arguments.get('--resolved'):
                         domains = await self.client_api.get_resolved_domains(self.arguments['<program>'])
-                        [print(f"{r['domain']} -> {r['resolved_ips']}") for r in domains.data]
+                        try:
+                            [print(f"{r['domain']} -> {r['resolved_ips']}") for r in domains.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
                     elif self.arguments.get('--unresolved'):
                         domains = await self.client_api.get_unresolved_domains(self.arguments['<program>'])
-                        [print(r['domain']) for r in domains.data]
+                        try:
+                            [print(r['domain']) for r in domains.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
                     else:
                         domains = await self.client_api.get_domains(self.arguments['<program>'])
-                        [print(r.get("domain")) for r in domains.data]
+                        try:
+                            [print(r.get("domain")) for r in domains.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
 
                 # h3xrecon -p program list ips
                 elif self.arguments.get('ips'):
                     if self.arguments.get('--resolved'):
                         ips = await self.client_api.get_reverse_resolved_ips(self.arguments['<program>'])
-                        [print(f"{r['ip']} -> {r['ptr']}") for r in ips.data]
+                        try:
+                            [print(f"{r['ip']} -> {r['ptr']}") for r in ips.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
                     elif self.arguments.get('--unresolved'):
                         ips = await self.client_api.get_not_reverse_resolved_ips(self.arguments['<program>'])
-                        [print(r['ip']) for r in ips.data]
+                        try:
+                            [print(r['ip']) for r in ips.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
                     else:
                         ips = await self.client_api.get_ips(self.arguments['<program>'])
-                        [print(r['ip']) for r in ips.data]
+                        try:
+                            [print(r['ip']) for r in ips.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
 
                 # h3xrecon -p program list urls
                 elif self.arguments.get('urls'):
@@ -230,18 +259,27 @@ class Client:
 
                     else:
                         urls = await self.client_api.get_urls(self.arguments['<program>'])
-                        [print(r['url']) for r in urls.data]
+                        try:
+                            [print(r['url']) for r in urls.data]
+                        except BrokenPipeError:
+                            sys.exit(0)
                     
                 # h3xrecon -p program list services
                 elif self.arguments.get('services'):
                     services = await self.client_api.get_services(self.arguments['<program>'])
-                    [print(f"{r.get('protocol')}:{r.get('ip')}:{r.get('port')}") for r in services.data]
+                    try:
+                        [print(f"{r.get('protocol')}:{r.get('ip')}:{r.get('port')}") for r in services.data]
+                    except BrokenPipeError:
+                        sys.exit(0)
 
                 # h3xrecon -p program list nuclei
                 elif self.arguments.get('nuclei'):
                     result = await self.client_api.get_nuclei(self.arguments['<program>'], severity=self.arguments['<severity>'])
                     items = set([r.get('url') for r in result.data])
-                    [print(i) for i in items]
+                    try:
+                        [print(i) for i in items]
+                    except BrokenPipeError:
+                        sys.exit(0)
                 
             # h3xrecon -p program show domains/ips/urls
             elif self.arguments.get('show'):
