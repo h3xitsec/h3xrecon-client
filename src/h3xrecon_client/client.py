@@ -106,7 +106,12 @@ class Client:
                     for i in items:
                         result = await self.client_api.remove_program(i)
                         if result.success:
-                            print(f"Program '{i}' removed successfully")
+                            if result.data == "DELETE 1":
+                                print(f"Program '{i}' removed successfully")
+                            elif result.data == "DELETE 0":
+                                print(f"Program '{i}' not found")
+                        elif result.error:
+                            print(f"Error removing program '{i}': {result.error}")
 
                 # h3xrecon program import
                 elif self.arguments.get('import'):

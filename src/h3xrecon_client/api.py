@@ -90,6 +90,12 @@ class ClientAPI:
         query = "INSERT INTO programs (name) VALUES ($1) RETURNING id"
         insert_result = await self.db._write_records(query, name)
         return insert_result
+    async def remove_program(self, program_name: str):
+        """
+        Remove a program from the database.
+        """
+        query = "DELETE FROM programs WHERE name = $1"
+        return await self.db._write_records(query, program_name)
 
     async def add_program_scope(self, program_name: str, scope: str):
         """
