@@ -151,7 +151,13 @@ class Client:
             
             # h3xrecon system
             elif self.arguments.get('system'):
-
+                # h3xrecon system cache
+                if self.arguments.get('cache'):
+                    if self.arguments.get('flush'):
+                        await self.client_api.flush_cache()
+                    elif self.arguments.get('show'):
+                        keys = await self.client_api.show_cache_keys_values()
+                        [print(k) for k in keys]
                 # h3xrecon system queue
                 if self.arguments.get('queue'):
                     if self.arguments['worker']:

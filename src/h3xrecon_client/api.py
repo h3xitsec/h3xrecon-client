@@ -3,6 +3,7 @@ from typing import List
 from .config import ClientConfig
 from .database import Database
 from .queue import ClientQueue
+import redis
 
 class ClientAPI:
     def __init__(self):
@@ -14,7 +15,29 @@ class ClientAPI:
         logger.debug("Initializing ClientAPI")
         self.db = Database()
         self.queue = ClientQueue()
-
+        self.redis_config = ClientConfig().redis
+        self.redis_client = redis.Redis(
+            host=self.redis_config.host,
+            port=self.redis_config.port,
+            db=self.redis_config.db,
+            password=self.redis_config.password
+        )
+    async def flush_cache(self):
+        """
+        Flush the Redis cache.
+        """
+        self.redis_client.flushall()
+    async def show_cache_keys(self):
+        """
+        Show the Redis cache info.
+        """
+        return self.redis_client.keys()
+    async def show_cache_keys_values(self):
+        """
+        Show the Redis cache keys with values
+        """
+        return [{'key': key.decode(), 'value': self.redis_client.get(key).decode()} for key in self.redis_client.keys()]
+        
     # Programs related methods
     async def get_programs(self):
         """

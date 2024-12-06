@@ -4,6 +4,13 @@ from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 @dataclass
+class RedisConfig:
+    host: str
+    port: int
+    db: int
+    password: Optional[str] = None
+
+@dataclass
 class DatabaseConfig:
     host: str
     port: int
@@ -57,6 +64,7 @@ class ClientConfig:
         self.database = DatabaseConfig(**config.get('database', {}))
         self.nats = NatsConfig(**config.get('nats', {}))
         self.logging = LogConfig(**config.get('logging', {}))
+        self.redis = RedisConfig(**config.get('redis', {}))
     
     def _load_client_config_file(self):
         """Load configuration from a JSON file."""
