@@ -543,7 +543,7 @@ class ClientAPI:
         """
         query = """
         SELECT 
-            url, template_id, severity
+            url, template_id, severity, matcher_name
         FROM nuclei n
         JOIN programs p ON n.program_id = p.id
         """
