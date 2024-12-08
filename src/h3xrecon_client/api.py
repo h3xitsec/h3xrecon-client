@@ -96,7 +96,14 @@ class ClientAPI:
         DELETE FROM ips WHERE program_id = $1
         """
         queries.append(query)
-
+        query = """
+        DELETE FROM nuclei WHERE program_id = $1
+        """
+        queries.append(query)
+        query = """
+        DELETE FROM certificates WHERE program_id = $1
+        """
+        queries.append(query)
         for q in queries:
             await self.db._write_records(q, program_id)
     
