@@ -670,3 +670,15 @@ class ClientAPI:
         )
         await self.queue.close()
     
+    async def get_certificates(self, program_name: str = None):
+        """
+        Retrieve certificates for a specific program or all programs.
+        """
+        query = """
+        SELECT subject_cn, issuer_org, serial, valid_date, expiry_date, array_length(subject_an, 1) as subject_an_count 
+        FROM certificates c
+        JOIN programs p ON c.program_id = p.id
+        """
+        if program_name:
+            query += " WHERE p.name = $1"
+        return await self.db._fetch_records(query, program_name)

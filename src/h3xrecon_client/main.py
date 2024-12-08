@@ -14,7 +14,7 @@ Usage:
     h3xrecon [ -p <program> ] ( config ) ( add | del ) ( cidr | scope ) ( - | <item> )
     h3xrecon [ -p <program> ] ( config ) ( list ) ( cidr | scope )
     h3xrecon [ -p <program> ] ( config ) ( database ) ( drop)
-    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips | urls | services | nuclei )
+    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips | urls | services | nuclei | certificates )
     h3xrecon [ -p <program> ] ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
     h3xrecon [ -p <program> ] ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( add | del ) ( domain | ip | url ) ( - | <item> )
