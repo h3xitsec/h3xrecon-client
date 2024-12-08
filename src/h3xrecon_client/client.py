@@ -281,6 +281,15 @@ class Client:
                     except BrokenPipeError:
                         sys.exit(0)
                 
+                # h3xrecon -p program list certificates
+                elif self.arguments.get('certificates'):
+                    result = await self.client_api.get_certificates(self.arguments['<program>'])
+                    try:
+                        for r in result.data:
+                            print(f"{r.get('subject_cn')}")
+                    except BrokenPipeError:
+                        sys.exit(0)
+                
             # h3xrecon -p program show domains/ips/urls
             elif self.arguments.get('show'):
                 result = None
@@ -305,6 +314,10 @@ class Client:
                 elif self.arguments.get('nuclei'):
                     result = await self.client_api.get_nuclei(self.arguments['<program>'], severity=self.arguments['<severity>'])
                 
+                # h3xrecon -p program show certificates
+                elif self.arguments.get('certificates'):
+                    result = await self.client_api.get_certificates(self.arguments['<program>'])
+
                 # print the results in a table format
                 if result:
                     headers = list(result.data[0].keys())
