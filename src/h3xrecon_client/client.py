@@ -182,6 +182,14 @@ class Client:
                     elif self.arguments.get('flush'):
                         result = await self.client_queue.flush_stream(stream)
                         print(result)
+                # h3xrecon system workers
+                if self.arguments.get('workers'):
+                    if self.arguments.get('status'):
+                        workers = self.client_api.get_workers()
+                        [print(f"{r.decode()}: {self.client_api.get_worker_status(r).decode()}") for r in workers]
+                    elif self.arguments.get('list'):
+                        workers = self.client_api.get_workers()
+                        [print(r.decode()) for r in workers]
             
             # h3xrecon -p program add domain/ip/url
             elif self.arguments.get('add'):

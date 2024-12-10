@@ -16,12 +16,22 @@ class ClientAPI:
         self.db = Database()
         self.queue = ClientQueue()
         self.redis_config = ClientConfig().redis
-        self.redis_client = redis.Redis(
+        self.redis_cache = redis.Redis(
             host=self.redis_config.host,
             port=self.redis_config.port,
-            db=self.redis_config.db,
-            password=self.redis_config.password
+            db=0,
         )
+        self.redis_status = redis.Redis(
+            host=self.redis_config.host,
+            port=self.redis_config.port,
+            db=1
+        )
+    def get_workers(self):
+        return self.redis_status.keys()
+    
+    def get_worker_status(self, worker_id: str):
+        return self.redis_status.get(worker_id)
+    
     async def flush_cache(self):
         """
         Flush the Redis cache.
