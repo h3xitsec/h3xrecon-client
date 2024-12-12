@@ -2,7 +2,7 @@ import os
 import json
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
-
+from loguru import logger
 @dataclass
 class RedisConfig:
     host: str
@@ -61,6 +61,7 @@ class LogConfig:
 class ClientConfig:
     def __init__(self):
         config = self._load_client_config_file()
+        logger.debug(f"Client config: {config}")
         self.database = DatabaseConfig(**config.get('database', {}))
         self.nats = NatsConfig(**config.get('nats', {}))
         self.logging = LogConfig(**config.get('logging', {}))

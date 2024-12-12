@@ -20,11 +20,13 @@ class ClientAPI:
             host=self.redis_config.host,
             port=self.redis_config.port,
             db=0,
+            password=self.redis_config.password
         )
         self.redis_status = redis.Redis(
             host=self.redis_config.host,
             port=self.redis_config.port,
-            db=1
+            db=1,
+            password=self.redis_config.password
         )
     def get_workers(self):
         return self.redis_status.keys()
