@@ -79,7 +79,7 @@ class ClientAPI:
         SELECT id FROM programs WHERE name = $1
         """
         result = await self.db._fetch_records(query, program_name)
-        return result.data[0].get('id',{})
+        return result.data[0].get('id') if result.data else None
 
     async def drop_program_data(self, program_name: str):
         """

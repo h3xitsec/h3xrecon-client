@@ -76,8 +76,29 @@ class Client:
         
     async def run(self):
         logger.debug("Running Client")
-        # h3xrecon program
         try:
+            # Check if we're using a program-specific command
+            if self.arguments.get('<program>'):
+                # Skip program existence check for these commands
+                skip_check_commands = [
+                    'program add',  # Adding new program
+                    'program import'  # Importing programs
+                ]
+                
+                # Build current command string for comparison
+                current_command = ' '.join(
+                    cmd for cmd in ['program', 'add', 'del', 'import'] 
+                    if self.arguments.get(cmd)
+                )
+                
+                # Only check program existence if not in skip_check_commands
+                if current_command not in skip_check_commands:
+                    program_exists = await self.client_api.get_program_id(self.arguments['<program>'])
+                    if not program_exists:
+                        print(f"Error: Program '{self.arguments['<program>']}' not found")
+                        return
+
+            # h3xrecon program
             if self.arguments.get('program'):
                 
                 # h3xrecon program list
@@ -220,7 +241,10 @@ class Client:
                     if self.arguments.get('--resolved'):
                         domains = await self.client_api.get_resolved_domains(self.arguments['<program>'])
                         try:
-                            [print(f"{r['domain']} -> {r['resolved_ips']}") for r in domains.data]
+                            if not domains.data:
+                                print("No resolved domains found")
+                            else:
+                                [print(f"{r['domain']} -> {r['resolved_ips']}") for r in domains.data]
                         except BrokenPipeError:
                             sys.exit(0)
                     elif self.arguments.get('--unresolved'):
@@ -301,7 +325,7 @@ class Client:
             # h3xrecon -p program show domains/ips/urls
             elif self.arguments.get('show'):
                 result = None
-                #if self.arguments['<program>']:
+                
                 # h3xrecon -p program show domains
                 if self.arguments.get('domains'):
                     result = await self.client_api.get_domains(self.arguments['<program>'])
@@ -327,16 +351,17 @@ class Client:
                     result = await self.client_api.get_certificates(self.arguments['<program>'])
 
                 # print the results in a table format
-                if result:
-                    headers = list(result.data[0].keys())
-                    
-                    def truncate_value(value, max_length=50):
-                        if headers.index(list(headers)[0]) != headers.index(list(headers)[0]) and isinstance(value, str) and len(value) > max_length:
-                            return value[:max_length] + '...'
-                        return value
-                    
-                    rows = [[truncate_value(val) for val in x.values()] for x in result.data]
-                    print(tabulate(rows, headers=headers, tablefmt='grid'))
+                if result and result.data:  # Check if result exists and has data
+                    if result.data:  # Empty results
+                        headers = list(result.data[0].keys())
+                        
+                        def truncate_value(value, max_length=50):
+                            if headers.index(list(headers)[0]) != headers.index(list(headers)[0]) and isinstance(value, str) and len(value) > max_length:
+                                return value[:max_length] + '...'
+                            return value
+                        
+                        rows = [[truncate_value(val) for val in x.values()] for x in result.data]
+                        print(tabulate(rows, headers=headers, tablefmt='grid'))
 
             # h3xrecon -p program sendjob
             elif self.arguments.get('sendjob'):
