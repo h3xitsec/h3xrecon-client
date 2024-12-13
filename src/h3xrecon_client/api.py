@@ -16,27 +16,41 @@ class ClientAPI:
         self.db = Database()
         self.queue = ClientQueue()
         self.redis_config = ClientConfig().redis
-        self.redis_client = redis.Redis(
+        self.redis_cache = redis.Redis(
             host=self.redis_config.host,
             port=self.redis_config.port,
-            db=self.redis_config.db,
+            db=0,
             password=self.redis_config.password
         )
+        self.redis_status = redis.Redis(
+            host=self.redis_config.host,
+            port=self.redis_config.port,
+            db=1,
+            password=self.redis_config.password
+        )
+    def get_workers(self):
+        return self.redis_status.keys()
+    
+    def get_worker_status(self, worker_id: str):
+        return self.redis_status.get(worker_id)
+    
     async def flush_cache(self):
         """
         Flush the Redis cache.
         """
-        self.redis_client.flushall()
+        self.redis_cache.flushdb()
+    
     async def show_cache_keys(self):
         """
         Show the Redis cache info.
         """
-        return self.redis_client.keys()
+        return self.redis_cache.keys()
+
     async def show_cache_keys_values(self):
         """
         Show the Redis cache keys with values
         """
-        return [{'key': key.decode(), 'value': self.redis_client.get(key).decode()} for key in self.redis_client.keys()]
+        return [{'key': key.decode(), 'value': self.redis_cache.get(key).decode()} for key in self.redis_cache.keys()]
         
     # Programs related methods
     async def get_programs(self):
@@ -67,7 +81,7 @@ class ClientAPI:
         SELECT id FROM programs WHERE name = $1
         """
         result = await self.db._fetch_records(query, program_name)
-        return result.data[0].get('id',{})
+        return result.data[0].get('id') if result.data else None
 
     async def drop_program_data(self, program_name: str):
         """
@@ -96,7 +110,14 @@ class ClientAPI:
         DELETE FROM ips WHERE program_id = $1
         """
         queries.append(query)
-
+        query = """
+        DELETE FROM nuclei WHERE program_id = $1
+        """
+        queries.append(query)
+        query = """
+        DELETE FROM certificates WHERE program_id = $1
+        """
+        queries.append(query)
         for q in queries:
             await self.db._write_records(q, program_id)
     
@@ -543,7 +564,7 @@ class ClientAPI:
         """
         query = """
         SELECT 
-            url, template_id, severity
+            url, template_id, severity, matcher_name
         FROM nuclei n
         JOIN programs p ON n.program_id = p.id
         """
@@ -663,3 +684,15 @@ class ClientAPI:
         )
         await self.queue.close()
     
+    async def get_certificates(self, program_name: str = None):
+        """
+        Retrieve certificates for a specific program or all programs.
+        """
+        query = """
+        SELECT subject_cn, issuer_org, serial, valid_date, expiry_date, array_length(subject_an, 1) as subject_an_count 
+        FROM certificates c
+        JOIN programs p ON c.program_id = p.id
+        """
+        if program_name:
+            query += " WHERE p.name = $1"
+        return await self.db._fetch_records(query, program_name)

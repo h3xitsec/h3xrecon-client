@@ -8,13 +8,14 @@ Usage:
     h3xrecon ( program ) ( import ) ( <file> )
     h3xrecon ( system ) ( queue ) ( show | messages | flush ) ( worker | job | data )
     h3xrecon ( system ) ( cache ) ( flush | show )
+    h3xrecon ( system ) ( workers ) ( status | list )
     h3xrecon ( list | show ) ( domains | ips | urls | services | nuclei )
     h3xrecon ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
     h3xrecon ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( config ) ( add | del ) ( cidr | scope ) ( - | <item> )
     h3xrecon [ -p <program> ] ( config ) ( list ) ( cidr | scope )
     h3xrecon [ -p <program> ] ( config ) ( database ) ( drop)
-    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips | urls | services | nuclei )
+    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips | urls | services | nuclei | certificates )
     h3xrecon [ -p <program> ] ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
     h3xrecon [ -p <program> ] ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( add | del ) ( domain | ip | url ) ( - | <item> )
