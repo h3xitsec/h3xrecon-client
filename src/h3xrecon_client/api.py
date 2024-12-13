@@ -38,17 +38,19 @@ class ClientAPI:
         """
         Flush the Redis cache.
         """
-        self.redis_client.flushall()
+        self.redis_cache.flushdb()
+    
     async def show_cache_keys(self):
         """
         Show the Redis cache info.
         """
-        return self.redis_client.keys()
+        return self.redis_cache.keys()
+
     async def show_cache_keys_values(self):
         """
         Show the Redis cache keys with values
         """
-        return [{'key': key.decode(), 'value': self.redis_client.get(key).decode()} for key in self.redis_client.keys()]
+        return [{'key': key.decode(), 'value': self.redis_cache.get(key).decode()} for key in self.redis_cache.keys()]
         
     # Programs related methods
     async def get_programs(self):
