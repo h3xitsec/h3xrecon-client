@@ -4,6 +4,8 @@ from .config import ClientConfig
 from .database import Database
 from .queue import ClientQueue
 import redis
+import asyncio
+import time
 
 class ClientAPI:
     def __init__(self):
@@ -28,12 +30,15 @@ class ClientAPI:
             db=1,
             password=self.redis_config.password
         )
+    
     def get_workers(self):
         return self.redis_status.keys()
     
     def get_worker_status(self, worker_id: str):
         return self.redis_status.get(worker_id)
     
+    
+
     async def flush_cache(self):
         """
         Flush the Redis cache.
@@ -134,6 +139,7 @@ class ClientAPI:
         query = "INSERT INTO programs (name) VALUES ($1) RETURNING id"
         insert_result = await self.db._write_records(query, name)
         return insert_result
+
     async def remove_program(self, program_name: str):
         """
         Remove a program from the database.
@@ -238,7 +244,7 @@ class ClientAPI:
         """
         result = await self.db._write_records(query, program_name, scope)
         if result:
-            logger.info(f"Scope removed from program {program_name}: {scope}")
+            print(f"Scope removed from program {program_name}: {scope}")
             return True
         return False
 
@@ -261,7 +267,7 @@ class ClientAPI:
         """
         result = await self.db._write_records(query, program_name, cidr)
         if result:
-            logger.info(f"CIDR removed from program {program_name}: {cidr}")
+            print(f"CIDR removed from program {program_name}: {cidr}")
             return True
         return False
 
@@ -312,7 +318,7 @@ class ClientAPI:
         """
         result = await self.db._fetch_value(query, program_name, domain)
         if result:
-            logger.info(f"Domain removed from program {program_name}: {domain}")
+            print(f"Domain removed from program {program_name}: {domain}")
             return True
         return False
 
@@ -649,7 +655,76 @@ class ClientAPI:
         )
         await self.queue.close()
         return True
+    
+    async def kill_job(self, worker_id: str):
+        """
+        Send a kill command to stop jobs on one or all workers.
+        
+        Args:
+            worker_id (str): Specific worker ID or "all" to kill jobs on all workers
+        """
+        subscription = None
+        try:
+            if worker_id == "all":
+                worker_keys = self.redis_status.keys("worker-*")
+                worker_ids = [key.decode('utf-8') for key in worker_keys]
+                print(f"Found {len(worker_ids)} workers to kill jobs for")
+            else:
+                worker_ids = [worker_id]
 
+            # Connect once for all operations
+            await self.queue.connect()
+            
+            # Send all kill commands first without waiting for responses
+            for current_worker_id in worker_ids:
+                control_message = {
+                    "command": "killjob",
+                    "target_worker_id": current_worker_id
+                }
+                
+                await self.queue.publish_message(
+                    subject="function.control",
+                    stream="FUNCTION_CONTROL",
+                    message=control_message
+                )
+                print(f"Sent kill command to worker {current_worker_id}")
+
+            # Brief wait to allow messages to be sent
+            await asyncio.sleep(0.5)
+
+            # Check that all workers are idle
+            max_retries = 10
+            retry_count = 0
+            while retry_count < max_retries:
+                all_idle = True
+                for current_worker_id in worker_ids:
+                    status = self.get_worker_status(current_worker_id)
+                    if status and status.decode('utf-8') != 'idle':
+                        all_idle = False
+                        break
+                
+                if all_idle:
+                    print("All workers are now idle")
+                    break
+                    
+                retry_count += 1
+                await asyncio.sleep(1)
+                
+            if not all_idle:
+                logger.warning("Some workers may still be processing jobs after kill command")
+                
+        except Exception as e:
+            logger.error(f"Failed to send kill command(s): {e}")
+            raise
+        finally:
+            # Force cleanup
+            try:
+                self.queue._running = False
+                await self.queue.close()
+                logger.debug("Queue connection closed")
+            except Exception as e:
+                logger.error(f"Error during queue cleanup: {e}")
+    
     async def send_job(self, function_name: str, program_name: str, params: dict, force: bool):
         """
         Send a job to the worker using QueueManager.

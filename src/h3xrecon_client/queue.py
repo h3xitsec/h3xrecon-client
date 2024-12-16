@@ -18,6 +18,7 @@ class ClientQueue:
         self.config = ClientConfig().nats
         logger.debug(f"NATS config: {self.config.url}")
         self._subscriptions = {}
+        self._processing_tasks = set()
     
     async def connect(self) -> None:
         """Connect to NATS server using environment variables for configuration."""
@@ -243,7 +244,6 @@ class ClientQueue:
             default_config = ConsumerConfig(**{**default_config.__dict__, **consumer_config})
 
         try:
-            # Create pull subscription
             subscription = await self.js.pull_subscribe(
                 subject,
                 durable_name,
@@ -251,15 +251,16 @@ class ClientQueue:
                 config=default_config
             )
             
-            # Store subscription for cleanup
             self._subscriptions[f"{stream}:{subject}:{durable_name}"] = subscription
             
-            # Start message processing
-            asyncio.create_task(self._process_messages(
+            # Create and track the processing task
+            task = asyncio.create_task(self._process_messages(
                 subscription, 
                 message_handler, 
                 batch_size
             ))
+            self._processing_tasks.add(task)
+            task.add_done_callback(self._processing_tasks.discard)
             
             logger.debug(f"Subscribed to '{subject}' on stream '{stream}' with durable name '{durable_name}'")
             
@@ -313,7 +314,23 @@ class ClientQueue:
 
     async def close(self) -> None:
         """Close the NATS connection and clean up resources."""
-        if self.nc and self.nc.is_connected:
-            await self.nc.drain()
-            await self.nc.close()
-            logger.debug("NATS connection closed")
+        try:
+            # Cancel all processing tasks
+            for task in self._processing_tasks:
+                if not task.done():
+                    task.cancel()
+            
+            # Wait for all tasks to complete
+            if self._processing_tasks:
+                await asyncio.gather(*self._processing_tasks, return_exceptions=True)
+            
+            # Close NATS connection
+            if self.nc and self.nc.is_connected:
+                await self.nc.drain()
+                await self.nc.close()
+                logger.debug("NATS connection closed")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+        finally:
+            self._processing_tasks.clear()
+            self._subscriptions.clear()

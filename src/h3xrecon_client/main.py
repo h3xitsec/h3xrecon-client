@@ -9,6 +9,7 @@ Usage:
     h3xrecon ( system ) ( queue ) ( show | messages | flush ) ( worker | job | data )
     h3xrecon ( system ) ( cache ) ( flush | show )
     h3xrecon ( system ) ( workers ) ( status | list )
+    h3xrecon ( system ) ( killjob ) ( <worker_id> )
     h3xrecon ( list | show ) ( domains | ips | urls | services | nuclei )
     h3xrecon ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
     h3xrecon ( list | show ) ( nuclei ) [--severity <severity>]
