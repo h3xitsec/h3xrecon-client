@@ -34,8 +34,7 @@ import asyncio
 import sys, os
 from docopt import docopt
 from .client import Client
-
-VERSION = "0.0.1"
+from .__about__ import __version__ as VERSION
 
 def main():
     try:
