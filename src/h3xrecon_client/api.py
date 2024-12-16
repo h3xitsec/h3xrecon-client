@@ -691,27 +691,6 @@ class ClientAPI:
 
             # Brief wait to allow messages to be sent
             await asyncio.sleep(0.5)
-
-            # Check that all workers are idle
-            max_retries = 10
-            retry_count = 0
-            while retry_count < max_retries:
-                all_idle = True
-                for current_worker_id in worker_ids:
-                    status = self.get_worker_status(current_worker_id)
-                    if status and status.decode('utf-8') != 'idle':
-                        all_idle = False
-                        break
-                
-                if all_idle:
-                    print("All workers are now idle")
-                    break
-                    
-                retry_count += 1
-                await asyncio.sleep(1)
-                
-            if not all_idle:
-                logger.warning("Some workers may still be processing jobs after kill command")
                 
         except Exception as e:
             logger.error(f"Failed to send kill command(s): {e}")
@@ -721,7 +700,6 @@ class ClientAPI:
             try:
                 self.queue._running = False
                 await self.queue.close()
-                logger.debug("Queue connection closed")
             except Exception as e:
                 logger.error(f"Error during queue cleanup: {e}")
     
