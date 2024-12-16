@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import asyncio
 import sys
 import re
 import yaml
@@ -172,6 +171,12 @@ class Client:
             
             # h3xrecon system
             elif self.arguments.get('system'):
+                if self.arguments.get('killjob'):
+                    worker_id = self.arguments.get('<worker_id>')
+                    try:
+                        await self.client_api.kill_job(worker_id)
+                    except Exception as e:
+                        print(f"Failed to send kill command: {e}")
                 # h3xrecon system cache
                 if self.arguments.get('cache'):
                     if self.arguments.get('flush'):
