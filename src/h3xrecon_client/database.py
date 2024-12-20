@@ -7,6 +7,8 @@ from loguru import logger
 from typing import List, Dict, Any
 import asyncio
 import asyncpg
+import asyncpg.exceptions
+from typing import Union
 
 @dataclass
 class DbResult:
@@ -18,6 +20,10 @@ class DbResult:
     @property
     def failed(self) -> bool:
         return not self.success
+
+class DatabaseConnectionError(Exception):
+    """Raised when the database connection cannot be established."""
+    pass
 
 class Database:
     def __init__(self):
@@ -38,26 +44,47 @@ class Database:
         await self.close()
 
     async def ensure_connected(self):
+        """Ensure database connection with error handling."""
         if self.pool is None:
-            await self.connect()
+            try:
+                await self.connect()
+            except DatabaseConnectionError as e:
+                logger.error(f"Database connection failed: {str(e)}")
+                raise
 
     async def connect(self):
-        self.pool = await asyncpg.create_pool(**self.config)
+        """Establish connection to database with proper error handling."""
+        try:
+            self.pool = await asyncpg.create_pool(**self.config)
+        except asyncpg.exceptions.InvalidPasswordError:
+            raise DatabaseConnectionError("Invalid database credentials")
+        except asyncpg.exceptions.InvalidCatalogNameError:
+            raise DatabaseConnectionError("Database does not exist")
+        except asyncpg.exceptions.CannotConnectNowError:
+            raise DatabaseConnectionError("Database is not accepting connections")
+        except asyncpg.exceptions.PostgresConnectionError as e:
+            raise DatabaseConnectionError(f"Could not connect to database: {str(e)}")
+        except Exception as e:
+            raise DatabaseConnectionError(f"Unexpected database error: {str(e)}")
 
     async def close(self):
         if self.pool:
             await self.pool.close()
     
-    async def _fetch_records(self, query: str, *args):
-        """Execute a SELECT query and return the results."""
+    async def _fetch_records(self, query: str, *args) -> DbResult:
+        """Execute a SELECT query with enhanced error handling."""
         try:
             await self.ensure_connected()
             async with self.pool.acquire() as conn:
                 records = await conn.fetch(query, *args)
                 formatted_records = await self.format_records(records)
             return DbResult(success=True, data=formatted_records)
+        except DatabaseConnectionError as e:
+            return DbResult(success=False, error=f"Database connection error: {str(e)}")
+        except asyncpg.exceptions.PostgresError as e:
+            return DbResult(success=False, error=f"Database query error: {str(e)}")
         except Exception as e:
-            return DbResult(success=False, error=str(e))
+            return DbResult(success=False, error=f"Unexpected error: {str(e)}")
     
     async def _fetch_value(self, query: str, *args):
         """Execute a SELECT query and return the first value."""
