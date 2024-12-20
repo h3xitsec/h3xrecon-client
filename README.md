@@ -70,7 +70,7 @@ cat << EOF > ~/.h3xrecon/config.json
 EOF
 
 # Create alias
-alias h3xrecon="docker run --network=host --rm -it -v ~/.h3xrecon:/root/.h3xrecon ghcr.io/h3xitsec/h3xrecon_cli:latest"
+alias h3xrecon="docker run --network=host --rm -it -v ~/.h3xrecon:/root/.h3xrecon ghcr.io/h3xitsec/h3xrecon/client:latest"
 ```
 
 ## 💻 Usage
