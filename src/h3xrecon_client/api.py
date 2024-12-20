@@ -119,11 +119,11 @@ class ClientAPI:
                 logger.error(f"Failed to get programs: {result.error}")
                 if "Database connection error" in str(result.error):
                     print("Error: Could not connect to database. Please check your database configuration and connectivity.")
-                return DbResult(success=False, data=[], error=result.error)
+                return []
             return result
         except Exception as e:
             logger.error(f"Unexpected error in get_programs: {str(e)}")
-            return DbResult(success=False, data=[], error=str(e))
+            return []
     
     async def get_program_id(self, program_name: str) -> int:
         """
