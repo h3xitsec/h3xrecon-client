@@ -1,13 +1,14 @@
 from loguru import logger
 from typing import List, Dict, Any
 from .config import ClientConfig
-from .database import Database
+from .database import Database, DatabaseConnectionError
 from .queue import ClientQueue
 import redis
 import asyncio
 import time
 import json
 from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy
+import redis.exceptions
 
 class ClientAPI:
     def __init__(self):
@@ -17,27 +18,67 @@ class ClientAPI:
         Sets up a database connection for performing various API operations.
         """
         logger.debug("Initializing ClientAPI")
-        self.db = Database()
-        self.queue = ClientQueue()
-        self.redis_config = ClientConfig().redis
-        self.redis_cache = redis.Redis(
-            host=self.redis_config.host,
-            port=self.redis_config.port,
-            db=0,
-            password=self.redis_config.password
-        )
-        self.redis_status = redis.Redis(
-            host=self.redis_config.host,
-            port=self.redis_config.port,
-            db=1,
-            password=self.redis_config.password
-        )
+        try:
+            self.db = Database()
+            self.queue = ClientQueue()
+            self.redis_config = ClientConfig().redis
+            
+            # Initialize Redis connections with error handling
+            try:
+                self.redis_cache = redis.Redis(
+                    host=self.redis_config.host,
+                    port=self.redis_config.port,
+                    db=0,
+                    password=self.redis_config.password,
+                    socket_timeout=5,  # Add timeout
+                    socket_connect_timeout=5
+                )
+                self.redis_status = redis.Redis(
+                    host=self.redis_config.host,
+                    port=self.redis_config.port,
+                    db=1,
+                    password=self.redis_config.password,
+                    socket_timeout=5,
+                    socket_connect_timeout=5
+                )
+                # Test connections
+                self.redis_cache.ping()
+                self.redis_status.ping()
+            except redis.exceptions.ConnectionError as e:
+                logger.error(f"Redis connection failed: {str(e)}")
+                self.redis_cache = None
+                self.redis_status = None
+            except redis.exceptions.AuthenticationError:
+                logger.error("Redis authentication failed")
+                self.redis_cache = None
+                self.redis_status = None
+            
+        except DatabaseConnectionError as e:
+            logger.error(f"Failed to initialize database connection: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to initialize ClientAPI: {str(e)}")
+            raise
     
     def get_workers(self):
-        return self.redis_status.keys()
+        """Get workers with Redis error handling."""
+        try:
+            if self.redis_status is None:
+                return []
+            return self.redis_status.keys()
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while getting workers: {str(e)}")
+            return []
     
     def get_worker_status(self, worker_id: str):
-        return self.redis_status.get(worker_id)
+        """Get worker status with Redis error handling."""
+        try:
+            if self.redis_status is None:
+                return None
+            return self.redis_status.get(worker_id)
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while getting worker status: {str(e)}")
+            return None
     
     
 
@@ -67,12 +108,22 @@ class ClientAPI:
         Returns:
             A list of programs with their ID and name, ordered alphabetically.
         """
-        query = """
-        SELECT p.id, p.name
-        FROM programs p
-        ORDER BY p.name;
-        """
-        return await self.db._fetch_records(query)
+        try:
+            query = """
+            SELECT p.id, p.name
+            FROM programs p
+            ORDER BY p.name;
+            """
+            result = await self.db._fetch_records(query)
+            if result.failed:
+                logger.error(f"Failed to get programs: {result.error}")
+                if "Database connection error" in str(result.error):
+                    print("Error: Could not connect to database. Please check your database configuration and connectivity.")
+                return DbResult(success=False, data=[], error=result.error)
+            return result
+        except Exception as e:
+            logger.error(f"Unexpected error in get_programs: {str(e)}")
+            return DbResult(success=False, data=[], error=str(e))
     
     async def get_program_id(self, program_name: str) -> int:
         """

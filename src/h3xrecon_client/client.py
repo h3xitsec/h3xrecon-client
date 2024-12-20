@@ -10,6 +10,7 @@ from .queue import ClientQueue, StreamLockedException
 from .config import ClientConfig
 import asyncio
 import json
+from .database import DatabaseConnectionError
 
 class Client:
     arguments = None
@@ -76,8 +77,32 @@ class Client:
                 print("")
         
     async def run(self):
-        logger.debug("Running Client")
+        """Run client commands with enhanced error handling."""
         try:
+            # Verify database connectivity first
+            try:
+                await self.client_api.db.ensure_connected()
+            except DatabaseConnectionError as e:
+                print(f"Error: Could not connect to database - {str(e)}")
+                print("Please check your database configuration and ensure the database is running.")
+                return
+            except Exception as e:
+                print(f"Error: Unexpected error while connecting to database - {str(e)}")
+                return
+
+            # Continue with existing command handling...
+            if self.arguments.get('program'):
+                if self.arguments.get('list'):
+                    try:
+                        programs = await self.client_api.get_programs()
+                        if programs.failed:
+                            print(f"Error retrieving programs: {programs.error}")
+                            return
+                        [print(r.get("name")) for r in programs.data]
+                    except Exception as e:
+                        print(f"Error: Failed to list programs - {str(e)}")
+                        return
+
             # h3xrecon -p program sendjob
             if self.arguments.get('sendjob'):
                 try:
@@ -450,6 +475,7 @@ class Client:
             print(f"Error: {str(e)}")
         except Exception as e:
             logger.exception(e)
+            print(f"Error: {str(e)}")
 
 def process_stdin():
     # Process standard input and filter out empty lines
