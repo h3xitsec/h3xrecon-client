@@ -210,7 +210,7 @@ class CommandHandlers:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
     async def handle_list_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
-        """Handle list commands with pagination"""
+        """Handle list commands"""
         try:
             if type_name == 'domains':
                 if resolved:
@@ -237,9 +237,10 @@ class CommandHandlers:
             elif type_name == 'services':
                 result = await self.api.get_services(program)
                 return [(
-                    f"{service.get('protocol', 'tcp')}:{service['ip']}:{service['port']}", 
-                    service.get('status', 'unknown'),
-                    service.get('service', 'unknown')
+                    service['ip'],
+                    service.get('port', 'N/A'),
+                    service.get('service', 'unknown'),
+                    service.get('version', 'N/A')
                 ) for service in result.data]
                 
             elif type_name == 'nuclei':
@@ -268,8 +269,8 @@ class CommandHandlers:
             return []
 
     async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
-        """Handle show commands with pagination"""
-        # Reuse the list command handler since we're using pagination for both now
+        """Handle show commands"""
+        # Use the same data fetching logic as list commands
         return await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
 
     async def handle_sendjob_command(self, function: str, target: str, program: str, 
