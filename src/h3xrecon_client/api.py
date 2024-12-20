@@ -17,7 +17,7 @@ class ClientAPI:
         
         Sets up a database connection for performing various API operations.
         """
-        logger.debug("Initializing ClientAPI")
+        
         try:
             self.db = Database()
             self.queue = ClientQueue()
@@ -656,7 +656,7 @@ class ClientAPI:
         # Format message based on item type
         if isinstance(items, str):
             items = [items]
-        logger.debug(f"Adding {item_type} items to program {program_name}: {items}")
+        
         if item_type == 'url':
             items = [{'url': item} for item in items]
         #for item in items:
@@ -944,11 +944,7 @@ class ClientAPI:
                         logger.error(f"Error fetching messages: {e}")
                     # Don't break on timeout, continue until full timeout period
                     await asyncio.sleep(0.1)
-            
-            remaining_time = timeout - (asyncio.get_event_loop().time() - start_time)
-            if remaining_time > 0:
-                logger.debug(f"Got response in {timeout - remaining_time:.2f} seconds")
-            
+                        
             if not responses:
                 return {"status": "error", "message": f"No response received from {component_type} after {timeout} seconds"}
             
