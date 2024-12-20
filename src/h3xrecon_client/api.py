@@ -1,7 +1,7 @@
 from loguru import logger
 from typing import List, Dict, Any
 from .config import ClientConfig
-from .database import Database, DatabaseConnectionError
+from .database import Database, DatabaseConnectionError, DbResult
 from .queue import ClientQueue
 import redis
 import asyncio
@@ -106,7 +106,7 @@ class ClientAPI:
         Retrieve a list of all reconnaissance programs.
         
         Returns:
-            A list of programs with their ID and name, ordered alphabetically.
+            DbResult: A result object containing the list of programs
         """
         try:
             query = """
@@ -119,11 +119,11 @@ class ClientAPI:
                 logger.error(f"Failed to get programs: {result.error}")
                 if "Database connection error" in str(result.error):
                     print("Error: Could not connect to database. Please check your database configuration and connectivity.")
-                return []
+                return DbResult(success=False, error=result.error)
             return result
         except Exception as e:
             logger.error(f"Unexpected error in get_programs: {str(e)}")
-            return []
+            return DbResult(success=False, error=str(e))
     
     async def get_program_id(self, program_name: str) -> int:
         """
@@ -767,29 +767,34 @@ class ClientAPI:
             params (dict): The parameters for the job.
             force (bool): Whether to force the job execution.
         
-        Logs an error if the program does not exist.
+        Returns:
+            DbResult: A result object with success status and optional error message
         """
         try:
             program_id = await self.get_program_id(program_name)
+            if not program_id:
+                return DbResult(success=False, error=f"Program '{program_name}' not found")
+
+            message = {
+                "force": force,
+                "function": function_name,
+                "program_id": program_id,
+                "params": params
+            }
+
+            await self.queue.connect()
+            await self.queue.publish_message(
+                subject="function.execute",
+                stream="FUNCTION_EXECUTE",
+                message=message
+            )
+            await self.queue.close()
+            
+            return DbResult(success=True)
+            
         except Exception as e:
-            logger.error(f"Non existent program '{program_name}'")
-            logger.exception(e)
-            return
-
-        message = {
-            "force": force,
-            "function": function_name,
-            "program_id": program_id,
-            "params": params #{"target": target}
-        }
-
-        await self.queue.connect()
-        await self.queue.publish_message(
-            subject="function.execute",
-            stream="FUNCTION_EXECUTE",
-            message=message
-        )
-        await self.queue.close()
+            logger.error(f"Error sending job: {str(e)}")
+            return DbResult(success=False, error=str(e))
 
     
     async def get_certificates(self, program_name: str = None):

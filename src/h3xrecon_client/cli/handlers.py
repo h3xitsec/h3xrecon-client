@@ -277,6 +277,16 @@ class CommandHandlers:
                                    force: bool = False, params: List[str] = None) -> None:
         """Handle sendjob command"""
         try:
+            # First check if program exists
+            programs = await self.api.get_programs()
+            if not programs.success:
+                self.console.print(f"[red]Error: Could not verify program: {programs.error}[/]")
+                return
+                
+            if not any(p.get("name") == program for p in programs.data):
+                self.console.print(f"[red]Error: Program '{program}' not found[/]")
+                return
+
             result = await self.api.send_job(
                 function_name=function,
                 program_name=program,
@@ -286,10 +296,13 @@ class CommandHandlers:
                 },
                 force=force
             )
-            if result.success:
+            
+            if result and result.success:
                 self.console.print("[green]Job sent successfully[/]")
             else:
-                self.console.print(f"[red]Error sending job: {result.error}[/]")
+                error_msg = result.error if result else "Unknown error"
+                self.console.print(f"[red]Error sending job: {error_msg}[/]")
+                
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
