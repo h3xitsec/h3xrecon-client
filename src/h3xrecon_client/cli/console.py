@@ -210,7 +210,16 @@ class H3xReconConsole(CommandHandlers):
         
         while True:
             clear()
-            await self.show_current_page(headers)
+            if headers:
+                # Table format for show command
+                await self.show_current_page(headers)
+            else:
+                # Simple list format for list command
+                start_idx = (self.current_page - 1) * self.items_per_page
+                end_idx = start_idx + self.items_per_page
+                page_items = self.current_items[start_idx:end_idx]
+                for item in page_items:
+                    self.console.print(item)
             
             # Show navigation help
             nav_text = (
@@ -302,19 +311,35 @@ class H3xReconConsole(CommandHandlers):
         return widths
 
     async def handle_list_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
-        """Handle list commands with pagination"""
+        """Handle list commands - simple list format"""
+        items = await super().handle_list_commands(type_name, program, resolved, unresolved, severity)
+        if items:
+            # Get the main identifier for each asset type
+            identifiers = []
+            for item in items:
+                if type_name == 'domains':
+                    identifiers.append(item[0])  # domain
+                elif type_name == 'ips':
+                    identifiers.append(item[0])  # ip
+                elif type_name == 'urls':
+                    identifiers.append(item[0])  # url
+                elif type_name == 'services':
+                    identifiers.append(f"{item[0]}:{item[1]}")  # ip:port
+                elif type_name == 'nuclei':
+                    identifiers.append(f"{item[0]} ({item[2]})")  # target (severity)
+                elif type_name == 'certificates':
+                    identifiers.append(item[0])  # domain
+            
+            # Display paginated list of identifiers
+            await self.display_paginated_items(identifiers)
+            
+    async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
+        """Handle show commands - detailed table format"""
         items = await super().handle_list_commands(type_name, program, resolved, unresolved, severity)
         if items:
             headers = self.get_headers_for_type(type_name)
             await self.display_paginated_items(items, headers)
-            
-    async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
-        """Handle show commands with pagination"""
-        items = await super().handle_show_commands(type_name, program, resolved, unresolved, severity)
-        if items:
-            headers = self.get_headers_for_type(type_name)
-            await self.display_paginated_items(items, headers)
-            
+
     def get_headers_for_type(self, type_name):
         """Return headers based on asset type"""
         headers_map = {
