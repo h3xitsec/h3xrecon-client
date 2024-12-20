@@ -6,8 +6,10 @@ from docopt import docopt
 from tabulate import tabulate
 from loguru import logger
 from .api import ClientAPI
-from .queue import ClientQueue
+from .queue import ClientQueue, StreamLockedException
 from .config import ClientConfig
+import asyncio
+import json
 
 class Client:
     arguments = None
@@ -76,6 +78,30 @@ class Client:
     async def run(self):
         logger.debug("Running Client")
         try:
+            # h3xrecon -p program sendjob
+            if self.arguments.get('sendjob'):
+                try:
+                    targets = []
+                    if isinstance(self.arguments['<target>'], str):
+                        targets = [self.arguments['<target>']]
+                    if self.arguments.get('-'):
+                        targets.extend([u.rstrip() for u in process_stdin()])
+                    for target in targets:
+                        await self.client_api.send_job(
+                            function_name=self.arguments['<function>'],
+                            program_name=self.arguments['<program>'],
+                            params={
+                                "target": target,
+                                "extra_params": [a for a in self.arguments['<extra_param>'] if a != "--"]
+                            },
+                            force=self.arguments['--force']
+                        )
+                except Exception as e:
+                    logger.error(f"Error sending job: {e}")
+                    print(f"Error: {str(e)}")
+                    return
+                return
+
             # Check if we're using a program-specific command
             if self.arguments.get('<program>'):
                 # Skip program existence check for these commands
@@ -178,14 +204,14 @@ class Client:
                     except Exception as e:
                         print(f"Failed to send kill command: {e}")
                 # h3xrecon system cache
-                if self.arguments.get('cache'):
+                elif self.arguments.get('cache'):
                     if self.arguments.get('flush'):
                         await self.client_api.flush_cache()
                     elif self.arguments.get('show'):
                         keys = await self.client_api.show_cache_keys_values()
                         [print(k) for k in keys]
                 # h3xrecon system queue
-                if self.arguments.get('queue'):
+                elif self.arguments.get('queue'):
                     if self.arguments['worker']:
                         stream = 'FUNCTION_EXECUTE'
                     elif self.arguments['job']:
@@ -208,14 +234,66 @@ class Client:
                     elif self.arguments.get('flush'):
                         result = await self.client_queue.flush_stream(stream)
                         print(result)
+
                 # h3xrecon system workers
-                if self.arguments.get('workers'):
+                elif self.arguments.get('workers'):
                     if self.arguments.get('status'):
                         workers = self.client_api.get_workers()
                         [print(f"{r.decode()}: {self.client_api.get_worker_status(r).decode()}") for r in workers]
                     elif self.arguments.get('list'):
                         workers = self.client_api.get_workers()
                         [print(r.decode()) for r in workers]
+                # h3xrecon system pause/unpause
+                elif self.arguments.get('pause') or self.arguments.get('unpause'):
+                    processor_type = 'all'
+                    if self.arguments.get('dataprocessor'):
+                        processor_type = 'dataprocessor'
+                    elif self.arguments.get('jobprocessor'):
+                        processor_type = 'jobprocessor'
+                    elif self.arguments.get('worker'):
+                        processor_type = 'worker'
+                    
+                    try:
+                        component_id = self.arguments.get('<component_id>')
+                        if self.arguments.get('pause'):
+                            result = await self.client_api.pause_processor(processor_type, component_id)
+                        else:  # unpause
+                            result = await self.client_api.unpause_processor(processor_type, component_id)
+                        
+                        print(result['message'])
+                        
+                        # Wait briefly for response
+                        await asyncio.sleep(1)
+                        
+                    except Exception as e:
+                        print(f"Error: {str(e)}")
+                # h3xrecon system report
+                elif self.arguments.get('report'):
+                    component_type = None
+                    if self.arguments.get('worker'):
+                        component_type = 'worker'
+                    elif self.arguments.get('jobprocessor'):
+                        component_type = 'jobprocessor'
+                    elif self.arguments.get('dataprocessor'):
+                        component_type = 'dataprocessor'
+                    
+                    try:
+                        component_id = self.arguments.get('<component_id>')
+                        result = await self.client_api.get_component_report(component_type, component_id)
+                        
+                        if result['status'] == 'success':
+                            for report in result['reports']:
+                                if 'report' in report:
+                                    print(f"\nReport from {report.get('processor_id', 'unknown')}:")
+                                    print(json.dumps(report['report'], indent=2))
+                                else:
+                                    print(f"\nInvalid report format from {report.get('processor_id', 'unknown')}")
+                        else:
+                            print(f"Error: {result['message']}")
+                        
+                    except Exception as e:
+                        print(f"Error: {str(e)}")
+                return
             
             # h3xrecon -p program add domain/ip/url
             elif self.arguments.get('add'):
@@ -368,26 +446,8 @@ class Client:
                         rows = [[truncate_value(val) for val in x.values()] for x in result.data]
                         print(tabulate(rows, headers=headers, tablefmt='grid'))
 
-            # h3xrecon -p program sendjob
-            elif self.arguments.get('sendjob'):
-                targets = []
-                if isinstance(self.arguments['<target>'], str):
-                    targets = [self.arguments['<target>']]
-                if self.arguments.get('-'):
-                    targets.extend([u.rstrip() for u in process_stdin()])
-                for target in targets:
-                    await self.client_api.send_job(
-                        function_name=self.arguments['<function>'],
-                        program_name=self.arguments['<program>'],
-                        params={
-                            "target": target,
-                            "extra_params": [a for a in self.arguments['<extra_param>'] if a != "--"]
-                        },
-                        force=self.arguments['--force']
-                    )
-
-            else:
-                raise ValueError("No valid argument found")
+        except StreamLockedException as e:
+            print(f"Error: {str(e)}")
         except Exception as e:
             logger.exception(e)
 

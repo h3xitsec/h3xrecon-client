@@ -6,8 +6,13 @@ from loguru import logger
 import json
 import asyncio
 from .config import ClientConfig
+import nats.js.errors
 
 class ClientQueue:
+    # Class-level storage for stream subjects (shared across instances)
+    _stream_subjects = {}
+    _locked_streams = set()
+
     def __init__(self):
         """Initialize the QueueManager without connecting to NATS.
         The actual connection is established when connect() is called.
@@ -175,9 +180,11 @@ class ClientQueue:
             try:
                 # Purge all messages from the stream
                 await js.purge_stream(stream_name)
+                await js.purge_stream(f"locked.{stream_name}")
                 return {"status": "success", "message": f"Stream {stream_name} flushed successfully"}
             except Exception as e:
-                return {"status": "error", "message": f"Error flushing stream: {str(e)}"}
+                pass
+                #return {"status": "error", "message": f"Error flushing stream: {str(e)}"}
             
         except Exception as e:
             return {"status": "error", "message": f"NATS connection error: {str(e)}"}
@@ -203,7 +210,10 @@ class ClientQueue:
                 payload.encode(),
                 stream=stream
             )
-            logger.debug(f"Published message to {subject} on stream {stream}\nMessage:\n{json.dumps(json.loads(payload), indent=4)}")
+            print(f"Published message to {subject} on stream {stream}\nMessage:\n{json.dumps(json.loads(payload), indent=4)}")
+        except nats.js.errors.NoStreamResponseError:
+            logger.warning(f"Cannot publish to stream {stream}: Stream is locked or unavailable")
+            raise StreamLockedException(f"Stream {stream} is locked or unavailable")
         except Exception as e:
             logger.error(f"Failed to publish message: {e}")
             raise
@@ -334,3 +344,7 @@ class ClientQueue:
         finally:
             self._processing_tasks.clear()
             self._subscriptions.clear()
+
+class StreamLockedException(Exception):
+    """Exception raised when attempting to publish to a locked stream."""
+    pass

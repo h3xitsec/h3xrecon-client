@@ -22,7 +22,7 @@ H3XRecon client is a powerful command-line tool designed for managing and orches
 
 ```bash
 # Pull the image
-docker pull ghcr.io/h3xitsec/h3xrecon_cli:v0.0.3
+docker pull ghcr.io/h3xitsec/h3xrecon/client:latest
 
 # Create the configuration file
 cat << EOF > ~/.h3xrecon/config.yaml
@@ -41,6 +41,11 @@ cat << EOF > ~/.h3xrecon/config.yaml
   "logging": {
     "level": "DEBUG",
     "format": "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> - <level>{message}</level>"
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "password": "redispassword
   }
 }
 EOF
@@ -53,17 +58,31 @@ alias h3xrecon="docker run --network=host --rm -it -v ~/.h3xrecon:/root/.h3xreco
 
 ```bash
 Usage:
-    h3xrecon ( program ) ( list )
-    h3xrecon ( program ) ( add | del) ( <program> )
+    h3xrecon ( program ) ( list ) 
+    h3xrecon ( program ) ( add | del) ( - | <program> )
     h3xrecon ( program ) ( import ) ( <file> )
+    h3xrecon ( system ) ( queue ) ( show | messages | flush ) ( worker | job | data )
+    h3xrecon ( system ) ( cache ) ( flush | show )
+    h3xrecon ( system ) ( workers ) ( status | list )
+    h3xrecon ( system ) ( killjob ) ( <worker_id> )
+    h3xrecon ( list | show ) ( domains | ips | urls | services | nuclei )
+    h3xrecon ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
+    h3xrecon ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( config ) ( add | del ) ( cidr | scope ) ( - | <item> )
     h3xrecon [ -p <program> ] ( config ) ( list ) ( cidr | scope )
     h3xrecon [ -p <program> ] ( config ) ( database ) ( drop)
-    h3xrecon ( system ) ( queue ) ( show | messages | flush ) ( worker | job | data )
-    h3xrecon [ -p <program> ] ( list ) ( domains | ips ) [--resolved] [--unresolved]
-    h3xrecon [ -p <program> ] ( list ) ( urls | services ) [--details]
+    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips | urls | services | nuclei | certificates )
+    h3xrecon [ -p <program> ] ( list | show ) ( domains | ips ) [--resolved] [--unresolved]
+    h3xrecon [ -p <program> ] ( list | show ) ( nuclei ) [--severity <severity>]
     h3xrecon [ -p <program> ] ( add | del ) ( domain | ip | url ) ( - | <item> )
-    h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( <target> ) [--force]
+    h3xrecon [ -p <program> ] ( sendjob ) ( <function> ) ( - | <target> ) [ <extra_param>... ] [--force]
+
+Options:
+    -p --program     Program to work on.
+    --resolved       Show only resolved items.
+    --unresolved    Show only unresolved items.
+    --force         Force execution of job.
+    --severity      Show only nuclei results with the specified severity.
 ```
 
 ```bash
@@ -95,6 +114,23 @@ h3xrecon system queue messages <queue_name>
 
 # Clear queue
 h3xrecon system queue flush <queue_name>
+```
+
+Kill a running job:
+
+```bash
+# Kill the running job on a specific worker
+h3xrecon system killjob workerid
+
+# Kill all running jobs on all workers
+h3xrecon system killjob all
+```
+
+Show workers status:
+
+```bash
+# Show workers status
+h3xrecon system workers status
 ```
 
 ### Program Management
@@ -141,7 +177,6 @@ programs:
       - 4.5.6.0/24
       - 3.4.0.0/16
 ```
-
 
 #### Scope Management
 
@@ -305,6 +340,8 @@ h3xrecon -p <program_name> list domains
 # List only resolved domains
 h3xrecon -p <program_name> list domains --resolved
 
+# Show domain details in a table format
+h3xrecon -p <program_name> show domains example.com
 # Remove domain
 h3xrecon -p <program_name> del domain example.com
 ```
@@ -318,6 +355,9 @@ h3xrecon -p <program_name> list ips
 # List IPs with PTR records
 h3xrecon -p <program_name> list ips --resolved
 
+# Show IP details in a table format
+h3xrecon -p <program_name> show ips 1.1.1.1
+
 # Remove IP
 h3xrecon -p <program_name> del ip 1.1.1.1
 ```
@@ -328,8 +368,44 @@ h3xrecon -p <program_name> del ip 1.1.1.1
 # List all URLs
 h3xrecon -p <program_name> list urls
 
+# Show URL details in a table format
+h3xrecon -p <program_name> show urls https://example.com
+
 # Remove URL
 h3xrecon -p <program_name> del url https://example.com
+```
+
+#### Services
+
+```bash
+# List all services
+h3xrecon -p <program_name> list services
+
+# Show service details in a table format
+h3xrecon -p <program_name> show services 80
+
+# Remove service
+h3xrecon -p <program_name> del service 80
+```
+
+#### Nuclei Hits
+
+```bash
+# List all nuclei hits
+h3xrecon -p <program_name> list nuclei
+
+# Show nuclei hit details in a table format
+h3xrecon -p <program_name> show nuclei
+```
+
+#### Certificates
+
+```bash
+# List all certificates
+h3xrecon -p <program_name> list certificates
+
+# Show certificate details in a table format
+h3xrecon -p <program_name> show certificates
 ```
 
 ## 🔧 Advanced Usage
@@ -370,3 +446,4 @@ Example configuration files for bulk operations:
 - The `--resolved` and `--unresolved` flags are available for domains and IPs
 - All operations provide feedback on success or failure
 - Commands are case-sensitive
+```

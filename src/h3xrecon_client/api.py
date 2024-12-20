@@ -1,11 +1,13 @@
 from loguru import logger
-from typing import List
+from typing import List, Dict, Any
 from .config import ClientConfig
 from .database import Database
 from .queue import ClientQueue
 import redis
 import asyncio
 import time
+import json
+from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy
 
 class ClientAPI:
     def __init__(self):
@@ -542,6 +544,7 @@ class ClientAPI:
             SELECT 
                 ip,
                 ptr,
+                cloud_provider,
                 p.name as program
             FROM ips i
             JOIN programs p ON i.program_id = p.id
@@ -736,6 +739,7 @@ class ClientAPI:
             message=message
         )
         await self.queue.close()
+
     
     async def get_certificates(self, program_name: str = None):
         """
@@ -749,3 +753,164 @@ class ClientAPI:
         if program_name:
             query += " WHERE p.name = $1"
         return await self.db._fetch_records(query, program_name)
+
+    async def pause_processor(self, processor_type: str, component_id: str = None) -> Dict[str, Any]:
+        """
+        Pause a specific processor or all processors.
+        
+        Args:
+            processor_type: Type of processor to pause ('dataprocessor', 'jobprocessor', or 'worker')
+            component_id: Optional specific component ID to target
+        """
+        try:
+            await self.queue.connect()
+            
+            control_message = {
+                "command": "pause",
+                "target": processor_type
+            }
+            
+            if component_id:
+                if processor_type == 'worker':
+                    control_message["target_worker_id"] = component_id
+                else:
+                    control_message["target_processor_id"] = component_id
+            
+            await self.queue.publish_message(
+                subject="function.control",
+                stream="FUNCTION_CONTROL",
+                message=control_message
+            )
+            
+            target_desc = f"{processor_type} {component_id}" if component_id else processor_type
+            return {"status": "success", "message": f"Pause command sent to {target_desc}"}
+        except Exception as e:
+            logger.error(f"Failed to send pause command: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            await self.queue.close()
+
+    async def unpause_processor(self, processor_type: str, component_id: str = None) -> Dict[str, Any]:
+        """
+        Unpause a specific processor or all processors.
+        
+        Args:
+            processor_type: Type of processor to unpause ('dataprocessor', 'jobprocessor', or 'worker')
+            component_id: Optional specific component ID to target
+        """
+        try:
+            await self.queue.connect()
+            
+            control_message = {
+                "command": "unpause",
+                "target": processor_type
+            }
+            
+            if component_id:
+                if processor_type == 'worker':
+                    control_message["target_worker_id"] = component_id
+                else:
+                    control_message["target_processor_id"] = component_id
+            
+            await self.queue.publish_message(
+                subject="function.control",
+                stream="FUNCTION_CONTROL",
+                message=control_message
+            )
+            
+            target_desc = f"{processor_type} {component_id}" if component_id else processor_type
+            return {"status": "success", "message": f"Unpause command sent to {target_desc}"}
+        except Exception as e:
+            logger.error(f"Failed to send unpause command: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            await self.queue.close()
+
+    async def get_component_report(self, component_type: str, component_id: str = None) -> Dict[str, Any]:
+        """
+        Get a report from a specific component or all components of a type.
+        """
+        try:
+            await self.queue.connect()
+            
+            # Create a subscription to receive the response before sending the request
+            response_sub = await self.queue.js.pull_subscribe(
+                subject="function.control.response",
+                durable=None,  # Ephemeral consumer
+                stream="FUNCTION_CONTROL_RESPONSE",
+                config=ConsumerConfig(
+                    deliver_policy=DeliverPolicy.NEW,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_deliver=1
+                )
+            )
+            
+            # Send the report request
+            control_message = {
+                "command": "report",
+                "target": component_type
+            }
+            
+            if component_id:
+                if component_type == 'worker':
+                    control_message["target_worker_id"] = component_id
+                else:
+                    control_message["target_processor_id"] = component_id
+            
+            await self.queue.publish_message(
+                subject="function.control",
+                stream="FUNCTION_CONTROL",
+                message=control_message
+            )
+            
+            # Wait a bit for the message to be processed
+            await asyncio.sleep(0.5)
+            
+            # Wait for responses (with timeout)
+            responses = []
+            start_time = asyncio.get_event_loop().time()
+            timeout = 5  # 5 seconds timeout
+            
+            while (asyncio.get_event_loop().time() - start_time) < timeout:
+                try:
+                    msgs = await response_sub.fetch(batch=1, timeout=1)
+                    for msg in msgs:
+                        try:
+                            data = json.loads(msg.data.decode())
+                            if data.get('command') == 'report':
+                                responses.append(data)
+                            await msg.ack()
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to decode message: {msg.data}")
+                            await msg.ack()
+                    
+                    # If we got responses, we can break early
+                    if responses:
+                        break
+                    
+                except Exception as e:
+                    if "timeout" not in str(e).lower():
+                        logger.error(f"Error fetching messages: {e}")
+                    # Don't break on timeout, continue until full timeout period
+                    await asyncio.sleep(0.1)
+            
+            remaining_time = timeout - (asyncio.get_event_loop().time() - start_time)
+            if remaining_time > 0:
+                logger.debug(f"Got response in {timeout - remaining_time:.2f} seconds")
+            
+            if not responses:
+                return {"status": "error", "message": f"No response received from {component_type} after {timeout} seconds"}
+            
+            return {"status": "success", "reports": responses}
+            
+        except Exception as e:
+            logger.error(f"Failed to get report: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            # Clean up subscription
+            if 'response_sub' in locals():
+                try:
+                    await response_sub.unsubscribe()
+                except:
+                    pass
+            await self.queue.close()
