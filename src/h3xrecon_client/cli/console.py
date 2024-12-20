@@ -9,6 +9,7 @@ import math
 import shutil
 import json
 import os
+import asyncio
 
 __all__ = ['H3xReconConsole']
 
@@ -17,6 +18,8 @@ class H3xReconConsole(CommandHandlers):
         super().__init__()
         self.session = PromptSession()
         self.running = True
+        self.current_program = None  # Initialize to None
+        self.config_file = os.path.expanduser('~/.h3xrecon/config.json')
         
         # Define command completions
         self.completer = NestedCompleter.from_nested_dict({
@@ -120,7 +123,7 @@ class H3xReconConsole(CommandHandlers):
         
         # Get terminal size and set items per page
         terminal_height = shutil.get_terminal_size().lines
-        self.items_per_page = terminal_height - 6  # Leave room for headers and navigation
+        self.items_per_page = terminal_height - 6
         self.current_page = 1
         self.total_pages = 1
         self.current_items = []
@@ -132,19 +135,9 @@ class H3xReconConsole(CommandHandlers):
             'q': self.quit_pagination,
         }
         
-        # Load active program from config
-        self.config_file = os.path.expanduser('~/.h3xrecon/config.json')
+        # Load config synchronously
         self.load_active_program()
-        
-    def load_active_program(self):
-        """Load active program from config file"""
-        try:
-            with open(self.config_file, 'r') as f:
-                config = json.load(f)
-                self.current_program = config.get('client', {}).get('active_program')
-        except Exception as e:
-            self.console.print(f"[yellow]Warning: Could not load active program: {str(e)}[/]")
-            
+
     def save_active_program(self):
         """Save active program to config file"""
         try:
@@ -163,6 +156,28 @@ class H3xReconConsole(CommandHandlers):
                 
         except Exception as e:
             self.console.print(f"[red]Error saving active program: {str(e)}[/]")
+
+    def load_active_program(self):
+        """Load active program from config file"""
+        try:
+            with open(self.config_file, 'r') as f:
+                config = json.load(f)
+                self.current_program = config.get('client', {}).get('active_program')
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not load active program: {str(e)}[/]")
+            self.current_program = None
+
+    async def validate_active_program(self):
+        """Validate that the loaded program exists"""
+        if self.current_program:
+            try:
+                programs = await self.api.get_programs()
+                if not any(p.get("name") == self.current_program for p in programs.data):
+                    self.console.print(f"[yellow]Warning: Saved program '{self.current_program}' no longer exists[/]")
+                    self.current_program = None
+            except Exception as e:
+                self.console.print(f"[yellow]Warning: Could not validate program: {str(e)}[/]")
+                self.current_program = None
 
     async def next_page(self, event=None):
         """Go to next page"""
@@ -386,6 +401,12 @@ class H3xReconConsole(CommandHandlers):
 
     async def run(self) -> None:
         """Run the interactive console"""
+        # Load config synchronously
+        self.load_active_program()
+        
+        # Validate program asynchronously
+        await self.validate_active_program()
+        
         self.console.print("[bold green]Welcome to H3xRecon Interactive Console[/]")
         self.console.print("Type 'help' for available commands\n")
 
