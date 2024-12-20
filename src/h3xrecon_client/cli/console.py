@@ -347,7 +347,7 @@ class H3xReconConsole(CommandHandlers):
             'ips': ['IP', 'Hostname', 'Status'],
             'urls': ['URL', 'Status', 'Title'],
             'services': ['IP', 'Port', 'Service', 'Version'],
-            'nuclei': ['Target', 'Template', 'Severity', 'Info'],
+            'nuclei': ['URL', 'Template', 'Severity', 'Name'],
             'certificates': ['Domain', 'Issuer', 'Valid Until']
         }
         return headers_map.get(type_name, None)

@@ -246,11 +246,11 @@ class CommandHandlers:
             elif type_name == 'nuclei':
                 result = await self.api.get_nuclei(program, severity=severity)
                 return [(
-                    nuclei['target'],
-                    nuclei.get('template', 'unknown'),
-                    nuclei.get('severity', 'unknown'),
-                    nuclei.get('info', 'N/A')
-                ) for nuclei in result.data]
+                    finding['url'],
+                    finding.get('template_id', 'unknown'),
+                    finding.get('severity', 'unknown'),
+                    finding.get('name', 'N/A')
+                ) for finding in result.data]
                 
             elif type_name == 'certificates':
                 result = await self.api.get_certificates(program)
