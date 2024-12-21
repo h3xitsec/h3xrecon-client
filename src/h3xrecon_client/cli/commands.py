@@ -44,9 +44,32 @@ def program_commands(
 def system_commands(
     component: str = typer.Argument(..., help="Component: killjob, cache, queue, workers, pause, unpause, report"),
     action: str = typer.Argument(..., help="Action to perform"),
-    args: Optional[List[str]] = typer.Argument(None, help="Additional arguments")
+    args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
 ):
-    """System management commands"""
+    """
+    System management commands
+    
+    Components:
+    - queue: Manage message queues (show/messages/flush/lock/unlock worker/job/data)
+    - cache: Manage system cache (flush/show)
+    - workers: Manage workers (status/list)
+    - killjob: Kill specific job
+    - pause/unpause: Control system components
+    - report: Get component reports
+    """
+    # Validate queue commands
+    if component == 'queue':
+        valid_actions = ['show', 'messages', 'flush', 'lock', 'unlock']
+        valid_targets = ['worker', 'job', 'data']
+        
+        if action not in valid_actions:
+            typer.echo(f"Error: Invalid queue action. Must be one of: {', '.join(valid_actions)}")
+            raise typer.Exit(1)
+            
+        if not args or args[0] not in valid_targets:
+            typer.echo(f"Error: Must specify queue type: {', '.join(valid_targets)}")
+            raise typer.Exit(1)
+    
     asyncio.run(handlers.handle_system_commands(component, action, args or []))
 
 @app.command("config")

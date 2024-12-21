@@ -54,14 +54,6 @@ extra-dependencies = [
 [tool.hatch.envs.types.scripts]
 check = "mypy --install-types --non-interactive {args:src/h3xrecon_client tests}"
 
-[tool.coverage.run]
-source_pkgs = ["h3xrecon_client", "tests"]
-branch = true
-parallel = true
-omit = [
-  "src/h3xrecon_client/__about__.py",
-]
-
 [project.scripts]
 h3xrecon = "h3xrecon_client.cli:app"
 
@@ -69,9 +61,22 @@ h3xrecon = "h3xrecon_client.cli:app"
 h3xrecon_client = ["src/h3xrecon_client", "*/h3xrecon-client/src/h3xrecon_client"]
 tests = ["tests", "*/h3xrecon-client/tests"]
 
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --cov=h3xrecon_client --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["h3xrecon_client"]
+omit = ["tests/*"]
+
 [tool.coverage.report]
 exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "pass",
+    "raise ImportError",
 ]

@@ -60,25 +60,29 @@ class ClientAPI:
             logger.error(f"Failed to initialize ClientAPI: {str(e)}")
             raise
     
-    def get_workers(self):
+    async def get_workers(self):
         """Get workers with Redis error handling."""
         try:
             if self.redis_status is None:
-                return []
-            return self.redis_status.keys()
+                return DbResult(success=False, error="Redis connection not available")
+            workers = [key.decode() for key in self.redis_status.keys()]
+            return DbResult(success=True, data=workers)
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting workers: {str(e)}")
-            return []
+            return DbResult(success=False, error=str(e))
     
-    def get_worker_status(self, worker_id: str):
+    async def get_worker_status(self, worker_id: str):
         """Get worker status with Redis error handling."""
         try:
             if self.redis_status is None:
-                return None
-            return self.redis_status.get(worker_id)
+                return DbResult(success=False, error="Redis connection not available")
+            status = self.redis_status.get(worker_id)
+            if status:
+                status = status.decode()
+            return DbResult(success=True, data=status)
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting worker status: {str(e)}")
-            return None
+            return DbResult(success=False, error=str(e))
     
     
 

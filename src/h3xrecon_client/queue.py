@@ -180,7 +180,6 @@ class ClientQueue:
             try:
                 # Purge all messages from the stream
                 await js.purge_stream(stream_name)
-                await js.purge_stream(f"locked.{stream_name}")
                 return {"status": "success", "message": f"Stream {stream_name} flushed successfully"}
             except Exception as e:
                 pass

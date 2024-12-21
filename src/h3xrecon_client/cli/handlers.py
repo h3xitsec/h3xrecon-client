@@ -1,6 +1,7 @@
 from rich.console import Console
 from rich.table import Table
 from ..api import ClientAPI
+from ..queue import ClientQueue, StreamLockedException
 from typing import Optional, List, Dict, Any
 import asyncio
 import yaml
@@ -10,6 +11,7 @@ class CommandHandlers:
         self.console = Console()
         self.api = ClientAPI()
         self.current_program = None
+        self.client_queue = ClientQueue()
 
     def show_help(self) -> None:
         """Show help information"""
@@ -101,10 +103,37 @@ class CommandHandlers:
         elif action == 'import' and args:
             await self.import_programs(args[0])
 
-    async def handle_system_commands(self, component: str, action: str, args: List[str]) -> None:
-        """Handle system-related commands"""
+    async def handle_system_commands(self, component: str, action: str, args: List[str] = None) -> None:
+        """Handle system management commands"""
         try:
-            if component == 'killjob' and args:
+            if component == 'workers':
+                if action == 'status':
+                    workers = await self.api.get_workers()
+                    if not workers.success:
+                        self.console.print(f"[red]Error getting workers: {workers.error}[/]")
+                        return
+                        
+                    for worker_id in workers.data:
+                        status = await self.api.get_worker_status(worker_id)
+                        if status.success and status.data:
+                            self.console.print(f"Worker {worker_id}: {status.data}")
+                        else:
+                            self.console.print(f"Worker {worker_id}: No status available")
+                            
+                elif action == 'list':
+                    workers = await self.api.get_workers()
+                    if not workers.success:
+                        self.console.print(f"[red]Error getting workers: {workers.error}[/]")
+                        return
+                        
+                    if workers.data:
+                        self.console.print("\nActive Workers:")
+                        for worker in workers.data:
+                            self.console.print(f"- {worker}")
+                    else:
+                        self.console.print("[yellow]No active workers found[/]")
+                        
+            elif component == 'killjob' and args:
                 await self.api.kill_job(args[0])
                 self.console.print("[green]Kill command sent[/]")
                 
@@ -117,6 +146,7 @@ class CommandHandlers:
                     [self.console.print(k) for k in keys]
                     
             elif component == 'queue':
+                # Determine which stream to use
                 stream = None
                 if 'worker' in args:
                     stream = 'FUNCTION_EXECUTE'
@@ -124,25 +154,68 @@ class CommandHandlers:
                     stream = 'FUNCTION_OUTPUT'
                 elif 'data' in args:
                     stream = 'RECON_DATA'
-                    
+
                 if action == 'show':
-                    result = await self.api.get_stream_info(stream)
-                    self.display_table_results(result)
+                    try:
+                        result = await self.client_queue.get_stream_info(stream)
+                        if result:
+                            # Create rich table for display
+                            table = Table()
+                            headers = result[0].keys()
+                            for header in headers:
+                                table.add_column(header.capitalize())
+                            
+                            for row in result:
+                                table.add_row(*[str(val) for val in row.values()])
+                            
+                            self.console.print(table)
+                        else:
+                            self.console.print("[yellow]No queue information available[/]")
+                    except StreamLockedException as e:
+                        self.console.print(f"[red]Error: Stream is locked - {str(e)}[/]")
+                    except Exception as e:
+                        self.console.print(f"[red]Error getting queue info: {str(e)}[/]")
+
                 elif action == 'messages':
-                    result = await self.api.get_stream_messages(stream)
-                    self.display_table_results(result)
+                    try:
+                        result = await self.client_queue.get_stream_messages(stream)
+                        if result:
+                            # Create rich table for display
+                            table = Table()
+                            headers = result[0].keys()
+                            for header in headers:
+                                table.add_column(header.capitalize())
+                            
+                            for row in result:
+                                table.add_row(*[str(val) for val in row.values()])
+                            
+                            self.console.print(table)
+                        else:
+                            self.console.print("[yellow]No messages found[/]")
+                    except StreamLockedException as e:
+                        self.console.print(f"[red]Error: Stream is locked - {str(e)}[/]")
+                    except Exception as e:
+                        self.console.print(f"[red]Error getting messages: {str(e)}[/]")
+
                 elif action == 'flush':
-                    result = await self.api.flush_stream(stream)
-                    self.console.print(result)
-                    
-            elif component == 'workers':
-                if action == 'status':
-                    workers = await self.api.get_workers()
-                    [self.console.print(f"{r}: {await self.api.get_worker_status(r)}") for r in workers]
-                elif action == 'list':
-                    workers = await self.api.get_workers()
-                    [self.console.print(r) for r in workers]
-                    
+                    try:
+                        result = await self.client_queue.flush_stream(stream)
+                        self.console.print(f"[green]{result}[/]")
+                    except StreamLockedException as e:
+                        self.console.print(f"[red]Error: Stream is locked - {str(e)}[/]")
+                    except Exception as e:
+                        self.console.print(f"[red]Error flushing stream: {str(e)}[/]")
+
+                elif action in ['lock', 'unlock']:
+                    try:
+                        if action == 'lock':
+                            result = await self.client_queue.lock_stream(stream)
+                        else:
+                            result = await self.client_queue.unlock_stream(stream)
+                        self.console.print(f"[green]{result}[/]")
+                    except Exception as e:
+                        self.console.print(f"[red]Error {action}ing stream: {str(e)}[/]")
+
             elif component in ['pause', 'unpause']:
                 processor_type = action
                 component_id = args[0] if args else None
