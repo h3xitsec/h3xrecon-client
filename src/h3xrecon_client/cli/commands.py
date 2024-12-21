@@ -8,6 +8,7 @@ from prompt_toolkit.shortcuts import clear
 from rich.console import Console
 import shutil
 import math
+import sys
 
 app = typer.Typer(
     name="h3xrecon",
@@ -337,6 +338,31 @@ def console_mode():
     from .console import H3xReconConsole
     console = H3xReconConsole()
     asyncio.run(console.run())
+
+@app.command("add")
+def add_commands(
+    type: str = typer.Argument(..., help="Type: domain, ip, url"),
+    item: str = typer.Argument(..., help="Item to add"),
+    program: Optional[str] = program_option,
+    stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin")
+):
+    """Add reconnaissance assets"""
+    program = get_program(program)
+    if not program:
+        typer.echo("Error: No program specified. Use -p/--program option.")
+        raise typer.Exit(1)
+
+    items = []
+    if stdin:
+        # Read from stdin
+        for line in sys.stdin:
+            line = line.strip()
+            if line:  # Skip empty lines
+                items.append(line)
+    else:
+        items = [item]
+
+    asyncio.run(handlers.handle_add_commands(type, program, items))
 
 if __name__ == "__main__":
     app()

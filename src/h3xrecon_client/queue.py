@@ -209,7 +209,6 @@ class ClientQueue:
                 payload.encode(),
                 stream=stream
             )
-            print(f"Published message to {subject} on stream {stream}\nMessage:\n{json.dumps(json.loads(payload), indent=4)}")
         except nats.js.errors.NoStreamResponseError:
             logger.warning(f"Cannot publish to stream {stream}: Stream is locked or unavailable")
             raise StreamLockedException(f"Stream {stream} is locked or unavailable")

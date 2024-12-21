@@ -513,3 +513,30 @@ class CommandHandlers:
                 self.console.print(item['subject_cn'])
             else:
                 self.console.print(str(item)) 
+
+    async def handle_add_commands(self, type_name: str, program: str, items: List[str]) -> None:
+        """Handle add commands for domains, IPs, and URLs"""
+        try:
+            if not program:
+                self.console.print("[red]Error: No program specified. Use -p/--program option.[/]")
+                return
+
+            # Validate program exists
+            programs = await self.api.get_programs()
+            if not any(p.get("name") == program for p in programs.data):
+                self.console.print(f"[red]Error: Program '{program}' not found[/]")
+                return
+
+            # Format items if single item provided
+            if isinstance(items, str):
+                items = [items]
+
+            # Add items through the API
+            try:
+                await self.api.add_item(type_name, program, items)
+                self.console.print(f"[green]Successfully added {len(items)} {type_name}(s) to program '{program}'[/]")
+            except Exception as e:
+                self.console.print(f"[red]Error adding {type_name}(s): {str(e)}[/]")
+
+        except Exception as e:
+            self.console.print(f"[red]Error: {str(e)}[/]") 

@@ -1,5 +1,5 @@
 from loguru import logger
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 from .config import ClientConfig
 from .database import Database, DatabaseConnectionError, DbResult
 from .queue import ClientQueue
@@ -641,43 +641,58 @@ class ClientAPI:
             result = await self.db._fetch_records(query, program_name)
         return result
     
-    async def add_item(self, item_type: str, program_name: str, items: list):
+    async def add_item(self, item_type: str, program_name: str, items: Union[str, List[str]]) -> DbResult:
         """
         Add items (domains, IPs, or URLs) to a program through the queue.
         
         Args:
-            item_type (str): Type of item to add (e.g., 'url', 'domain', 'ip').
-            program_name (str): The name of the program to add items to.
-            items (list): List of items to add.
+            item_type (str): Type of item to add ('domain', 'ip', 'url')
+            program_name (str): The name of the program to add items to
+            items (Union[str, List[str]]): Single item or list of items to add
         
-        Prints an error message if the program is not found.
+        Returns:
+            DbResult: Result object with success status and optional error
         """
-        program_id = await self.get_program_id(program_name)
-        if not program_id:
-            print(f"Error: Program '{program_name}' not found")
-            return
+        try:
+            # Get program ID
+            program_id = await self.get_program_id(program_name)
+            if not program_id:
+                return DbResult(success=False, error=f"Program '{program_name}' not found")
 
-        # Format message based on item type
-        if isinstance(items, str):
-            items = [items]
-        
-        if item_type == 'url':
-            items = [{'url': item} for item in items]
-        #for item in items:
-        message = {
-            "program_id": program_id,
-            "data_type": item_type,
-            "data": items
-        }
+            # Ensure items is a list
+            if isinstance(items, str):
+                items = [items]
 
-        # For URLs, we need to format the data differently
-        await self.queue.connect()
-        await self.queue.publish_message(
-            subject="recon.data",
-            stream="RECON_DATA",
-            message=message
-        )
-        await self.queue.close()
+            # Format items based on type
+            formatted_items = []
+            for item in items:
+                if item_type == 'url':
+                    formatted_items.append({'url': item})
+                else:
+                    formatted_items.append(item)
+
+            # Prepare message
+            message = {
+                "program_id": program_id,
+                "data_type": item_type,
+                "data": formatted_items
+            }
+
+            # Send through queue
+            await self.queue.connect()
+            try:
+                await self.queue.publish_message(
+                    subject="recon.data",
+                    stream="RECON_DATA",
+                    message=message
+                )
+                return DbResult(success=True)
+            finally:
+                await self.queue.close()
+
+        except Exception as e:
+            logger.error(f"Error adding {item_type}(s): {str(e)}")
+            return DbResult(success=False, error=str(e))
 
     async def remove_item(self, item_type: str, program_name: str, item: str) -> bool:
         """
