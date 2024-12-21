@@ -12,6 +12,7 @@ class CommandHandlers:
         self.api = ClientAPI()
         self.current_program = None
         self.client_queue = ClientQueue()
+        self.no_pager = False
 
     def show_help(self) -> None:
         """Show help information"""
@@ -106,7 +107,66 @@ class CommandHandlers:
     async def handle_system_commands(self, component: str, action: str, args: List[str] = None) -> None:
         """Handle system management commands"""
         try:
-            if component == 'workers':
+            if component == 'killjob':
+                worker_id = action
+                
+                # Get list of workers
+                workers = await self.api.get_workers()
+                if not workers.success:
+                    self.console.print(f"[red]Error: Could not get workers - {workers.error}[/]")
+                    return
+                    
+                # Handle 'all' option
+                if worker_id.lower() == 'all':
+                    if not workers.data:
+                        self.console.print("[yellow]No active workers found[/]")
+                        return
+                        
+                    self.console.print("[yellow]Sending kill command to all workers...[/]")
+                    for worker in workers.data:
+                        try:
+                            result = await self.api.kill_job(worker)
+                            if result.success:
+                                self.console.print(f"[green]Kill command sent successfully to worker {worker}[/]")
+                            else:
+                                self.console.print(f"[red]Error sending kill command to worker {worker}: {result.error}[/]")
+                        except Exception as e:
+                            self.console.print(f"[red]Error killing job on worker {worker}: {str(e)}[/]")
+                    
+                    # Wait briefly to check all workers' status
+                    await asyncio.sleep(1)
+                    for worker in workers.data:
+                        try:
+                            status = await self.api.get_worker_status(worker)
+                            if status.success and status.data:
+                                self.console.print(f"[yellow]Worker {worker} status: {status.data}[/]")
+                        except Exception as e:
+                            self.console.print(f"[red]Could not get status for worker {worker}: {str(e)}[/]")
+                            
+                else:
+                    # Single worker kill logic
+                    try:
+                        if not any(str(w) == str(worker_id) for w in workers.data):
+                            self.console.print(f"[red]Error: Worker '{worker_id}' not found[/]")
+                            return
+                        
+                        # Send kill command
+                        result = await self.api.kill_job(worker_id)
+                        if result.success:
+                            self.console.print(f"[green]Kill command sent successfully to worker {worker_id}[/]")
+                        else:
+                            self.console.print(f"[red]Error sending kill command: {result.error}[/]")
+                            
+                        # Wait briefly to check worker status
+                        await asyncio.sleep(1)
+                        status = await self.api.get_worker_status(worker_id)
+                        if status.success and status.data:
+                            self.console.print(f"[yellow]Worker {worker_id} status: {status.data}[/]")
+                        
+                    except Exception as e:
+                        self.console.print(f"[red]Error killing job on worker {worker_id}: {str(e)}[/]")
+
+            elif component == 'workers':
                 if action == 'status':
                     workers = await self.api.get_workers()
                     if not workers.success:
@@ -133,10 +193,6 @@ class CommandHandlers:
                     else:
                         self.console.print("[yellow]No active workers found[/]")
                         
-            elif component == 'killjob' and args:
-                await self.api.kill_job(args[0])
-                self.console.print("[green]Kill command sent[/]")
-                
             elif component == 'cache':
                 if action == 'flush':
                     await self.api.flush_cache()
@@ -292,7 +348,7 @@ class CommandHandlers:
                     result = await self.api.get_unresolved_domains(program)
                 else:
                     result = await self.api.get_domains(program)
-                return [(d['domain'], d.get('resolved_ips', 'N/A'), d.get('status', 'unknown')) for d in result.data]
+                return [(d['domain'], d.get('cnames', 'N/A'), d.get('is_catchall', 'unknown')) for d in result.data]
                 
             elif type_name == 'ips':
                 if resolved:
@@ -301,11 +357,11 @@ class CommandHandlers:
                     result = await self.api.get_not_reverse_resolved_ips(program)
                 else:
                     result = await self.api.get_ips(program)
-                return [(ip['ip'], ip.get('ptr', 'N/A'), ip.get('status', 'unknown')) for ip in result.data]
+                return [(ip['ip'], ip.get('ptr', 'N/A'), ip.get('cloud_provider', 'unknown')) for ip in result.data]
                 
             elif type_name == 'urls':
                 result = await self.api.get_urls(program)
-                return [(url['url'], url.get('status', 'unknown'), url.get('title', 'N/A')) for url in result.data]
+                return [(url['url'], url.get('title', 'N/A'), url.get('status_code', 'N/A'), url.get('content_type', 'N/A')) for url in result.data]
                 
             elif type_name == 'services':
                 result = await self.api.get_services(program)

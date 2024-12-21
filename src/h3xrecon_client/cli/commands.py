@@ -20,13 +20,20 @@ handlers = CommandHandlers()
 # Add program option to the main app
 program_option = typer.Option(None, "--program", "-p", help="Program to work on")
 
+# Add no_pager to the global options at the top
+no_pager_option = typer.Option(False, "--no-pager", help="Disable pagination and show all results at once")
+
 @app.callback()
-def main(program: Optional[str] = program_option):
+def main(
+    program: Optional[str] = program_option,
+    no_pager: bool = no_pager_option
+):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
     """
     if program:
         handlers.current_program = program
+    handlers.no_pager = no_pager
 
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
@@ -43,7 +50,7 @@ def program_commands(
 @app.command("system")
 def system_commands(
     component: str = typer.Argument(..., help="Component: killjob, cache, queue, workers, pause, unpause, report"),
-    action: str = typer.Argument(..., help="Action to perform"),
+    action: str = typer.Argument(None, help="Action to perform"),
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
 ):
     """
@@ -53,16 +60,25 @@ def system_commands(
     - queue: Manage message queues (show/messages/flush/lock/unlock worker/job/data)
     - cache: Manage system cache (flush/show)
     - workers: Manage workers (status/list)
-    - killjob: Kill specific job
+    - killjob: Kill specific job (requires worker_id or 'all')
     - pause/unpause: Control system components
     - report: Get component reports
     """
+    # Special handling for killjob since it doesn't need an action
+    if component == 'killjob':
+        worker_id = action  # Use the action parameter as worker_id
+        if not worker_id:
+            typer.echo("Error: Worker ID or 'all' is required for killjob command")
+            raise typer.Exit(1)
+        asyncio.run(handlers.handle_system_commands(component, worker_id, args))
+        return
+        
     # Validate queue commands
     if component == 'queue':
         valid_actions = ['show', 'messages', 'flush', 'lock', 'unlock']
         valid_targets = ['worker', 'job', 'data']
         
-        if action not in valid_actions:
+        if not action or action not in valid_actions:
             typer.echo(f"Error: Invalid queue action. Must be one of: {', '.join(valid_actions)}")
             raise typer.Exit(1)
             
@@ -70,6 +86,11 @@ def system_commands(
             typer.echo(f"Error: Must specify queue type: {', '.join(valid_targets)}")
             raise typer.Exit(1)
     
+    # For other commands that require an action
+    elif not action:
+        typer.echo(f"Error: Action is required for {component} command")
+        raise typer.Exit(1)
+        
     asyncio.run(handlers.handle_system_commands(component, action, args or []))
 
 @app.command("config")
@@ -238,7 +259,8 @@ def show_commands(
     resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
     unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
     severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
-    program: Optional[str] = program_option
+    program: Optional[str] = program_option,
+    no_pager: Optional[bool] = no_pager_option
 ):
     """Show reconnaissance assets in table format"""
     program = get_program(program)
@@ -247,23 +269,50 @@ def show_commands(
         raise typer.Exit(1)
         
     async def run():
-        items = await handlers.handle_list_commands(type, program, resolved, unresolved, severity)
+        items = await handlers.handle_show_commands(type, program, resolved, unresolved, severity)
         if items:
             headers = get_headers_for_type(type)
-            paginator = CliPaginator()
-            await paginator.paginate(items, headers)
+            
+            # Simplified logic: if either global or local no_pager is True, disable pagination
+            disable_pager = handlers.no_pager or no_pager
+            
+            if disable_pager:
+                # Display all results without pagination
+                console = Console()
+                terminal_width = shutil.get_terminal_size().columns
+                
+                # Calculate column widths
+                col_widths = CliPaginator().calculate_column_widths(headers, items, terminal_width)
+                
+                # Print headers
+                header_row = " | ".join(
+                    f"{h:<{w}}" for h, w in zip(headers, col_widths)
+                )
+                console.print(f"[bold]{header_row}[/]")
+                console.print("-" * min(sum(col_widths) + (len(headers) - 1) * 3, terminal_width))
+                
+                # Print items
+                for item in items:
+                    row = " | ".join(
+                        f"{str(field):<{w}}" for field, w in zip(item, col_widths)
+                    )
+                    console.print(row)
+            else:
+                # Use pagination
+                paginator = CliPaginator()
+                await paginator.paginate(items, headers)
             
     asyncio.run(run())
 
 def get_headers_for_type(type_name):
     """Return headers based on asset type"""
     headers_map = {
-        'domains': ['Domain', 'IP', 'Status'],
-        'ips': ['IP', 'Hostname', 'Status'],
-        'urls': ['URL', 'Status', 'Title'],
-        'services': ['IP', 'Port', 'Service', 'Version'],
-        'nuclei': ['Target', 'Template', 'Severity', 'Info'],
-        'certificates': ['Domain', 'Issuer', 'Valid Until']
+        'domains': ['Domain', 'CNAMEs', 'Catchall'],
+        'ips': ['IP', 'PTR', 'Cloud Provider'],
+        'urls': ['URL', 'Title', 'Status Code', 'Content Type'],
+        'services': ['Protocol', 'IP', 'Port', 'Service', 'PTR'],
+        'nuclei': ['Target', 'Template', 'Severity', 'Matcher Name'],
+        'certificates': ['Subject CN', 'Issuer Org', 'Serial', 'Valid Date', 'Expiry Date', 'Subject Alternative Names']
     }
     return headers_map.get(type_name, [])
 
