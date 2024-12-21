@@ -27,13 +27,13 @@ class DatabaseConnectionError(Exception):
 
 class Database:
     def __init__(self):
-        logger.debug("Initializing Database")
+        
         self.config = ClientConfig().database.to_dict()
         self._initialize()
     
     def _initialize(self, config=None):
         # Initialize your database connection here
-        logger.debug(f"Database config: {self.config}")
+        
         self.pool = None
 
     async def __aenter__(self):
@@ -98,7 +98,7 @@ class Database:
 
     async def _write_records(self, query: str, *args):
         """Execute an INSERT, UPDATE, or DELETE query and return the outcome."""
-        logger.debug(f"Executing modification query: {query} with args: {args}")
+        
         return_data = DbResult(success=False, data=None, error=None)
         try:
             await self.ensure_connected()
@@ -120,7 +120,7 @@ class Database:
             return_data.error = "Unique violation error."
         except Exception as e:
             return_data.error = str(e)
-        logger.debug(f"return_data: {return_data}")
+        
         return return_data
 
     async def format_records(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

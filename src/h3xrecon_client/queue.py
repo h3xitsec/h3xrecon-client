@@ -17,11 +17,11 @@ class ClientQueue:
         """Initialize the QueueManager without connecting to NATS.
         The actual connection is established when connect() is called.
         """
-        logger.debug(f"Initializing Queue Manager")
+        
         self.nc: Optional[NATS] = None
         self.js = None
         self.config = ClientConfig().nats
-        logger.debug(f"NATS config: {self.config.url}")
+        
         self._subscriptions = {}
         self._processing_tasks = set()
     
@@ -32,7 +32,7 @@ class ClientQueue:
             nats_server = self.config.url
             await self.nc.connect(servers=[nats_server])
             self.js = self.nc.jetstream()
-            logger.debug(f"Connected to NATS server at {nats_server}")
+            
         except Exception as e:
             logger.error(f"Failed to connect to NATS: Connection refused at {self.config.url}")
             raise ConnectionError("NATS connection failed: Connection refused") from e
@@ -42,7 +42,7 @@ class ClientQueue:
 
     async def ensure_connected(self) -> None:
         """Ensure NATS connection is established."""
-        logger.debug("Ensuring NATS connection is established")
+        
         if self.nc is None or not self.nc.is_connected:
             await self.connect()
     
@@ -180,7 +180,6 @@ class ClientQueue:
             try:
                 # Purge all messages from the stream
                 await js.purge_stream(stream_name)
-                await js.purge_stream(f"locked.{stream_name}")
                 return {"status": "success", "message": f"Stream {stream_name} flushed successfully"}
             except Exception as e:
                 pass
@@ -272,7 +271,7 @@ class ClientQueue:
             self._processing_tasks.add(task)
             task.add_done_callback(self._processing_tasks.discard)
             
-            logger.debug(f"Subscribed to '{subject}' on stream '{stream}' with durable name '{durable_name}'")
+            
             
         except Exception as e:
             logger.error(f"Failed to create subscription: {e}")
@@ -296,7 +295,7 @@ class ClientQueue:
                 
                 for msg in messages:
                     try:
-                        #logger.debug(f"Processing message sequence: {msg.metadata.sequence}")
+                        #
 
                         # Parse message data
                         data = json.loads(msg.data.decode())
@@ -307,13 +306,13 @@ class ClientQueue:
                         # Acknowledge message
                         if not msg._ackd:
                             await msg.ack()
-                            #logger.debug(f"Message {msg.metadata.sequence} acknowledged")
+                            #
                             
                     except Exception:
                         #logger.error(f"Error processing message {msg.metadata.sequence}: {e}")
                         if not msg._ackd:
                             await msg.nak()
-                            #logger.debug(f"Message {msg.metadata.sequence} negative acknowledged")
+                            #
                             
             except NatsTimeoutError:
                 await asyncio.sleep(0.1)
@@ -338,7 +337,7 @@ class ClientQueue:
             if self.nc and self.nc.is_connected:
                 await self.nc.drain()
                 await self.nc.close()
-                logger.debug("NATS connection closed")
+                
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
         finally:

@@ -1,7 +1,7 @@
 from loguru import logger
 from typing import List, Dict, Any
 from .config import ClientConfig
-from .database import Database, DatabaseConnectionError
+from .database import Database, DatabaseConnectionError, DbResult
 from .queue import ClientQueue
 import redis
 import asyncio
@@ -17,7 +17,7 @@ class ClientAPI:
         
         Sets up a database connection for performing various API operations.
         """
-        logger.debug("Initializing ClientAPI")
+        
         try:
             self.db = Database()
             self.queue = ClientQueue()
@@ -60,25 +60,29 @@ class ClientAPI:
             logger.error(f"Failed to initialize ClientAPI: {str(e)}")
             raise
     
-    def get_workers(self):
+    async def get_workers(self):
         """Get workers with Redis error handling."""
         try:
             if self.redis_status is None:
-                return []
-            return self.redis_status.keys()
+                return DbResult(success=False, error="Redis connection not available")
+            workers = [key.decode() for key in self.redis_status.keys()]
+            return DbResult(success=True, data=workers)
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting workers: {str(e)}")
-            return []
+            return DbResult(success=False, error=str(e))
     
-    def get_worker_status(self, worker_id: str):
+    async def get_worker_status(self, worker_id: str):
         """Get worker status with Redis error handling."""
         try:
             if self.redis_status is None:
-                return None
-            return self.redis_status.get(worker_id)
+                return DbResult(success=False, error="Redis connection not available")
+            status = self.redis_status.get(worker_id)
+            if status:
+                status = status.decode()
+            return DbResult(success=True, data=status)
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting worker status: {str(e)}")
-            return None
+            return DbResult(success=False, error=str(e))
     
     
 
@@ -106,7 +110,7 @@ class ClientAPI:
         Retrieve a list of all reconnaissance programs.
         
         Returns:
-            A list of programs with their ID and name, ordered alphabetically.
+            DbResult: A result object containing the list of programs
         """
         try:
             query = """
@@ -119,11 +123,11 @@ class ClientAPI:
                 logger.error(f"Failed to get programs: {result.error}")
                 if "Database connection error" in str(result.error):
                     print("Error: Could not connect to database. Please check your database configuration and connectivity.")
-                return DbResult(success=False, data=[], error=result.error)
+                return DbResult(success=False, error=result.error)
             return result
         except Exception as e:
             logger.error(f"Unexpected error in get_programs: {str(e)}")
-            return DbResult(success=False, data=[], error=str(e))
+            return DbResult(success=False, error=str(e))
     
     async def get_program_id(self, program_name: str) -> int:
         """
@@ -656,7 +660,7 @@ class ClientAPI:
         # Format message based on item type
         if isinstance(items, str):
             items = [items]
-        logger.debug(f"Adding {item_type} items to program {program_name}: {items}")
+        
         if item_type == 'url':
             items = [{'url': item} for item in items]
         #for item in items:
@@ -767,29 +771,34 @@ class ClientAPI:
             params (dict): The parameters for the job.
             force (bool): Whether to force the job execution.
         
-        Logs an error if the program does not exist.
+        Returns:
+            DbResult: A result object with success status and optional error message
         """
         try:
             program_id = await self.get_program_id(program_name)
+            if not program_id:
+                return DbResult(success=False, error=f"Program '{program_name}' not found")
+
+            message = {
+                "force": force,
+                "function": function_name,
+                "program_id": program_id,
+                "params": params
+            }
+
+            await self.queue.connect()
+            await self.queue.publish_message(
+                subject="function.execute",
+                stream="FUNCTION_EXECUTE",
+                message=message
+            )
+            await self.queue.close()
+            
+            return DbResult(success=True)
+            
         except Exception as e:
-            logger.error(f"Non existent program '{program_name}'")
-            logger.exception(e)
-            return
-
-        message = {
-            "force": force,
-            "function": function_name,
-            "program_id": program_id,
-            "params": params #{"target": target}
-        }
-
-        await self.queue.connect()
-        await self.queue.publish_message(
-            subject="function.execute",
-            stream="FUNCTION_EXECUTE",
-            message=message
-        )
-        await self.queue.close()
+            logger.error(f"Error sending job: {str(e)}")
+            return DbResult(success=False, error=str(e))
 
     
     async def get_certificates(self, program_name: str = None):
@@ -944,11 +953,7 @@ class ClientAPI:
                         logger.error(f"Error fetching messages: {e}")
                     # Don't break on timeout, continue until full timeout period
                     await asyncio.sleep(0.1)
-            
-            remaining_time = timeout - (asyncio.get_event_loop().time() - start_time)
-            if remaining_time > 0:
-                logger.debug(f"Got response in {timeout - remaining_time:.2f} seconds")
-            
+                        
             if not responses:
                 return {"status": "error", "message": f"No response received from {component_type} after {timeout} seconds"}
             

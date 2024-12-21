@@ -1,7 +1,4 @@
-"""
-Command-line interface for H3XRecon.
-"""
+"""H3xRecon Client Package"""
+from .__about__ import __version__
 
-from .client import Client
-
-__all__ = ['Client']
+__all__ = ['__version__']
