@@ -57,7 +57,7 @@ class ClientAPI:
             if type == "all":
                 prefix_bytes = None
                 components = all_keys
-            elif type in ["worker", "jobprocessor", "dataprocessor"]:
+            elif type in ["recon", "parsing", "data"]:
                 prefix_bytes = type.encode()
                 components = [key.decode() for key in all_keys if key.startswith(prefix_bytes)]
             else:
@@ -856,8 +856,8 @@ class ClientAPI:
             control_message = {"command": "killjob"}
             
             # Determine subject based on target
-            if target == "worker":
-                subject = "function.control.all_worker"
+            if target == "recon":
+                subject = "function.control.all_recon"
             elif target == "all":
                 subject = "function.control.all"
             else:
@@ -872,8 +872,8 @@ class ClientAPI:
             # Get expected components to wait for responses from
             if target == "all":
                 expected_components = await self.get_components("all")
-            elif target == "worker":
-                expected_components = await self.get_components("worker")
+            elif target == "recon":
+                expected_components = await self.get_components("recon")
             else:
                 expected_components = DbResult(success=True, data=[target])
 
@@ -1059,7 +1059,7 @@ class ClientAPI:
             control_message = {"command": action}
             
             # Determine subject based on target
-            if component == "worker" or component == "jobprocessor" or component == "dataprocessor":
+            if component == "recon" or component == "parsing" or component == "data":
                 subject = f"function.control.all_{component}"
             elif component == "all":
                 subject = "function.control.all"
@@ -1100,12 +1100,12 @@ class ClientAPI:
                         logger.error(f"Error fetching messages: {e}")
                         logger.exception(e)
                     await asyncio.sleep(0.1)
-            
             # Get list of components that didn't respond
             missing_components = []
-            for comp in expected_components.data:
-                if comp not in received_components:
-                    missing_components.append(comp)
+            for c in expected_components.data:
+                #comp = c.decode() if isinstance(c, bytes) else c
+                if c not in received_components:
+                    missing_components.append(c)
             
             return {
                 "status": "success" if responses else "warning",
