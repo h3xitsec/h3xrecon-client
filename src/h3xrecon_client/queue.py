@@ -192,6 +192,7 @@ class ClientQueue:
                 await self.nc.close()
             except:
                 pass
+    
     async def publish_message(self, subject: str, stream: str, message: Any) -> None:
         """
         Publish a message to a specific subject and stream.
@@ -294,8 +295,6 @@ class ClientQueue:
                 
                 for msg in messages:
                     try:
-                        #
-
                         # Parse message data
                         data = json.loads(msg.data.decode())
                         

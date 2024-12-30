@@ -48,51 +48,36 @@ def program_commands(
     """Manage reconnaissance programs"""
     asyncio.run(handlers.handle_program_commands(action, args or []))
 
+
+
 @app.command("system")
 def system_commands(
-    component: str = typer.Argument(..., help="Component: killjob, cache, queue, workers, pause, unpause, report"),
-    action: str = typer.Argument(None, help="Action to perform"),
+    # arg1: str = typer.Argument(..., help="Action: list/status/killjob/cache/queue/pause/unpause/report/ping"),
+    # arg2: str = typer.Argument(None, help="Component: worker/jobprocessor/dataprocessor/all"),
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
 ):
     """
     System management commands
     
-    Components:
+    Actions:
+    - list/status: Display component information (worker/jobprocessor/dataprocessor/all)
     - queue: Manage message queues (show/messages/flush/lock/unlock worker/job/data)
     - cache: Manage system cache (flush/show)
-    - workers: Manage workers (status/list)
     - killjob: Kill specific job (requires worker_id or 'all')
     - pause/unpause: Control system components
     - report: Get component reports
+    - ping: Ping a specific component
     """
-    # Special handling for killjob since it doesn't need an action
-    if component == 'killjob':
-        worker_id = action  # Use the action parameter as worker_id
-        if not worker_id:
-            typer.echo("Error: Worker ID or 'all' is required for killjob command")
-            raise typer.Exit(1)
-        asyncio.run(handlers.handle_system_commands(component, worker_id, args))
-        return
-        
-    # Validate queue commands
-    if component == 'queue':
-        valid_actions = ['show', 'messages', 'flush', 'lock', 'unlock']
-        valid_targets = ['worker', 'job', 'data']
-        
-        if not action or action not in valid_actions:
-            typer.echo(f"Error: Invalid queue action. Must be one of: {', '.join(valid_actions)}")
-            raise typer.Exit(1)
-            
-        if not args or args[0] not in valid_targets:
-            typer.echo(f"Error: Must specify queue type: {', '.join(valid_targets)}")
-            raise typer.Exit(1)
     
-    # For other commands that require an action
-    elif not action:
-        typer.echo(f"Error: Action is required for {component} command")
+    if args[0] in ['killjob', 'pause', 'unpause', 'ping', 'list', 'cache', 'report']:
+        asyncio.run(handlers.handle_system_commands_with_2_args(args[0], args[1]))
+        return
+    elif args[0] in ['queue', 'status']:
+        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2]))
+        return
+    else:
+        typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
         raise typer.Exit(1)
-        
-    asyncio.run(handlers.handle_system_commands(component, action, args or []))
 
 @app.command("config")
 def config_commands(

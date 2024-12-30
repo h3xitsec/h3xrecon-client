@@ -1,7 +1,7 @@
-from loguru import logger
 from typing import List, Dict, Any, Union
 from .config import ClientConfig
 from .database import Database, DatabaseConnectionError, DbResult
+from .cache import Cache, CacheResult
 from .queue import ClientQueue
 import redis
 import asyncio
@@ -9,6 +9,7 @@ import time
 import json
 from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy
 import redis.exceptions
+from loguru import logger
 
 class ClientAPI:
     def __init__(self):
@@ -25,22 +26,8 @@ class ClientAPI:
             
             # Initialize Redis connections with error handling
             try:
-                self.redis_cache = redis.Redis(
-                    host=self.redis_config.host,
-                    port=self.redis_config.port,
-                    db=0,
-                    password=self.redis_config.password,
-                    socket_timeout=5,  # Add timeout
-                    socket_connect_timeout=5
-                )
-                self.redis_status = redis.Redis(
-                    host=self.redis_config.host,
-                    port=self.redis_config.port,
-                    db=1,
-                    password=self.redis_config.password,
-                    socket_timeout=5,
-                    socket_connect_timeout=5
-                )
+                self.redis_cache = Cache(type="cache")
+                self.redis_status = Cache(type="status")
                 # Test connections
                 self.redis_cache.ping()
                 self.redis_status.ping()
@@ -60,16 +47,85 @@ class ClientAPI:
             logger.error(f"Failed to initialize ClientAPI: {str(e)}")
             raise
     
+    async def get_components(self, type: str):
+        """Get components with Redis error handling."""
+        try:
+            if self.redis_status is None:
+                return CacheResult(success=False, error="Redis connection not available")
+            # Only get keys that start with 'worker-'
+            all_keys = self.redis_status.keys()
+            if type == "all":
+                prefix_bytes = None
+                components = all_keys
+            elif type in ["worker", "jobprocessor", "dataprocessor"]:
+                prefix_bytes = type.encode()
+                components = [key.decode() for key in all_keys if key.startswith(prefix_bytes)]
+            else:
+                return CacheResult(success=False, error="Invalid component type")
+            
+            return CacheResult(success=True, data=components)
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while getting components: {str(e)}")
+            return CacheResult(success=False, error=str(e))
+    
+    async def get_component_status(self, component_id: str):
+        """Get component status with Redis error handling."""
+        try:
+            if self.redis_status is None:
+                return DbResult(success=False, error="Redis connection not available")
+            status = self.redis_status.get(component_id)
+            if status:
+                status = status.decode()
+            return DbResult(success=True, data=status)
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while getting component status: {str(e)}")
+            return DbResult(success=False, error=str(e))
+
+    async def flush_component_status(self, component_type: str) -> DbResult:
+        """Flush component status from Redis.
+        
+        Args:
+            component_type (str): Type of component to flush ('worker', 'jobprocessor', 'dataprocessor', 'all')
+            
+        Returns:
+            DbResult: Result of the flush operation
+        """
+        try:
+            if self.redis_status is None:
+                return DbResult(success=False, error="Redis connection not available")
+
+            # Get keys to delete based on component type
+            if component_type == "all":
+                keys_to_delete = self.redis_status.keys()
+            else:
+                prefix = f"{component_type}-"
+                prefix_bytes = prefix.encode()
+                keys_to_delete = [key for key in self.redis_status.keys() if key.startswith(prefix_bytes)]
+
+            # Delete the keys
+            if keys_to_delete:
+                for key in keys_to_delete:
+                    self.redis_status.delete(key)
+                return DbResult(success=True)
+            return DbResult(success=True, data="No keys to delete")
+
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while flushing component status: {str(e)}")
+            return DbResult(success=False, error=str(e))
+
     async def get_workers(self):
         """Get workers with Redis error handling."""
         try:
             if self.redis_status is None:
-                return DbResult(success=False, error="Redis connection not available")
-            workers = [key.decode() for key in self.redis_status.keys()]
-            return DbResult(success=True, data=workers)
+                return CacheResult(success=False, error="Redis connection not available")
+            # Only get keys that start with 'worker-'
+            prefix_bytes = b'worker-'
+            all_keys = self.redis_status.keys()
+            workers = [key.decode() for key in all_keys if key.startswith(prefix_bytes)]
+            return CacheResult(success=True, data=workers)
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting workers: {str(e)}")
-            return DbResult(success=False, error=str(e))
+            return CacheResult(success=False, error=str(e))
     
     async def get_worker_status(self, worker_id: str):
         """Get worker status with Redis error handling."""
@@ -84,7 +140,53 @@ class ClientAPI:
             logger.error(f"Redis error while getting worker status: {str(e)}")
             return DbResult(success=False, error=str(e))
     
-    
+    async def get_processors(self, processor_type: str):
+        """Get list of processors of specified type with Redis error handling.
+        
+        Args:
+            processor_type (str): Type of processor ('jobprocessors' or 'dataprocessors')
+        """
+        try:
+            if self.redis_status is None:
+                return DbResult(success=False, error="Redis connection not available")
+            
+            # Convert plural to singular for the prefix and remove 's' if it exists
+            prefix = processor_type.rstrip('s')
+            # Add hyphen to ensure exact prefix match (e.g., 'jobprocessor-' not 'jobprocessorextra-')
+            prefix = f"{prefix}-"
+            prefix_bytes = prefix.encode()  # Convert prefix to bytes for comparison
+            
+            # Get all keys and filter for the ones that match our pattern
+            all_keys = self.redis_status.keys()
+            processors = [key.decode() for key in all_keys if key.startswith(prefix_bytes)]
+            
+            # Debug logging
+
+
+
+
+            
+            return DbResult(success=True, data=processors)
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while getting processors: {str(e)}")
+            return DbResult(success=False, error=str(e))
+
+    async def get_processor_status(self, processor_id: str):
+        """Get processor status with Redis error handling.
+        
+        Args:
+            processor_id (str): ID of the processor to get status for
+        """
+        try:
+            if self.redis_status is None:
+                return DbResult(success=False, error="Redis connection not available")
+            status = self.redis_status.get(processor_id)
+            if status:
+                status = status.decode()
+            return DbResult(success=True, data=status)
+        except redis.exceptions.RedisError as e:
+            logger.error(f"Redis error while getting processor status: {str(e)}")
+            return DbResult(success=False, error=str(e))
 
     async def flush_cache(self):
         """
@@ -729,52 +831,120 @@ class ClientAPI:
         await self.queue.close()
         return True
     
-    async def kill_job(self, worker_id: str):
+    async def kill_job(self, target: str):
         """
         Send a kill command to stop jobs on one or all workers.
         
         Args:
-            worker_id (str): Specific worker ID or "all" to kill jobs on all workers
+            target (str): Specific component ID, "worker" for all workers, or "all" for all components
+            
+        Returns:
+            Dict containing command status and responses from components
         """
-        subscription = None
         try:
-            if worker_id == "all":
-                worker_keys = self.redis_status.keys("worker-*")
-                worker_ids = [key.decode('utf-8') for key in worker_keys]
-                print(f"Found {len(worker_ids)} workers to kill jobs for")
-            else:
-                worker_ids = [worker_id]
-
-            # Connect once for all operations
             await self.queue.connect()
             
-            # Send all kill commands first without waiting for responses
-            for current_worker_id in worker_ids:
-                control_message = {
-                    "command": "killjob",
-                    "target_worker_id": current_worker_id
-                }
-                
-                await self.queue.publish_message(
-                    subject="function.control",
-                    stream="FUNCTION_CONTROL",
-                    message=control_message
-                )
-                print(f"Sent kill command to worker {current_worker_id}")
-
-            # Brief wait to allow messages to be sent
-            await asyncio.sleep(0.5)
-                
-        except Exception as e:
-            logger.error(f"Failed to send kill command(s): {e}")
-            raise
-        finally:
-            # Force cleanup
+            # Ensure response stream exists
             try:
-                self.queue._running = False
-                await self.queue.close()
-            except Exception as e:
-                logger.error(f"Error during queue cleanup: {e}")
+                await self.queue.js.stream_info("CONTROL_RESPONSE_KILLJOB")
+            except Exception:
+                await self.queue.js.add_stream(
+                    name="CONTROL_RESPONSE_KILLJOB",
+                    subjects=["control.response.killjob"]
+                )
+
+            # Create ephemeral subscription for responses
+            response_sub = await self.queue.js.pull_subscribe(
+                subject="control.response.killjob",
+                durable=None,
+                stream="CONTROL_RESPONSE_KILLJOB",
+                config=ConsumerConfig(
+                    deliver_policy=DeliverPolicy.NEW,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_deliver=1
+                )
+            )
+
+            # Send kill command
+            control_message = {"command": "killjob"}
+            
+            # Determine subject based on target
+            if target == "worker":
+                subject = "function.control.all_worker"
+            elif target == "all":
+                subject = "function.control.all"
+            else:
+                subject = f"function.control.{target}"
+
+            await self.queue.publish_message(
+                subject=subject,
+                stream="FUNCTION_CONTROL",
+                message=control_message
+            )
+
+            # Get expected components to wait for responses from
+            if target == "all":
+                expected_components = await self.get_components("all")
+            elif target == "worker":
+                expected_components = await self.get_components("worker")
+            else:
+                expected_components = DbResult(success=True, data=[target])
+
+            if not expected_components.success:
+                return {"status": "error", "message": "Failed to get component list"}
+
+            # Wait for responses
+            responses = []
+            received_components = set()
+            max_wait_time = 15  # seconds
+            start_time = asyncio.get_event_loop().time()
+            
+            while len(received_components) < len(expected_components.data):
+                if (asyncio.get_event_loop().time() - start_time) > max_wait_time:
+                    break
+                    
+                try:
+                    msgs = await response_sub.fetch(batch=10, timeout=1)
+                    for msg in msgs:
+                        try:
+                            data = json.loads(msg.data.decode())
+                            if data.get('component_id'):
+                                responses.append(data)
+                                received_components.add(data['component_id'])
+                            await msg.ack()
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to decode message: {msg.data}")
+                            await msg.ack()
+                        
+                except Exception as e:
+                    if "timeout" not in str(e).lower():
+                        logger.error(f"Error fetching messages: {e}")
+                    await asyncio.sleep(0.1)
+            missing_components = []
+            # Get list of components that didn't respond
+            for comp in expected_components.data:
+                if comp not in received_components:
+                    missing_components.append(comp)
+            
+            return {
+                "status": "success" if responses else "warning",
+                "message": f"Kill command sent to {target}",
+                "responses": responses,
+                "missing_responses": missing_components
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to send kill command: {e}")
+            return {"status": "error", "message": str(e)}
+            
+        finally:
+            # Clean up subscription
+            if 'response_sub' in locals():
+                try:
+                    await response_sub.unsubscribe()
+                except:
+                    pass
+            await self.queue.close()
     
     async def send_job(self, function_name: str, program_name: str, params: dict, force: bool):
         """
@@ -829,90 +999,170 @@ class ClientAPI:
             query += " WHERE p.name = $1"
         return await self.db._fetch_records(query, program_name)
 
-    async def pause_processor(self, processor_type: str, component_id: str = None) -> Dict[str, Any]:
+    async def _wait_for_responses(self, response_sub, timeout: int = 5) -> List[Dict[str, Any]]:
         """
-        Pause a specific processor or all processors.
+        Helper method to wait for responses from components.
         
         Args:
-            processor_type: Type of processor to pause ('dataprocessor', 'jobprocessor', or 'worker')
-            component_id: Optional specific component ID to target
+            response_sub: NATS subscription to receive responses
+            timeout: Maximum time to wait for responses in seconds
+            
+        Returns:
+            List of response messages received
+        """
+        responses = []
+        start_time = asyncio.get_event_loop().time()
+        
+        while (asyncio.get_event_loop().time() - start_time) < timeout:
+            try:
+                msgs = await response_sub.fetch(batch=1, timeout=1)
+                for msg in msgs:
+                    try:
+                        data = json.loads(msg.data.decode())
+                        responses.append(data)
+                        await msg.ack()
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode message: {msg.data}")
+                        await msg.ack()
+                        
+                # If we got responses, we can break early
+                if responses:
+                    break
+                    
+            except Exception as e:
+                if "timeout" not in str(e).lower():
+                    logger.error(f"Error fetching messages: {e}")
+                await asyncio.sleep(0.1)
+                
+        return responses
+    
+    async def pause_component(self, component: str, disable: bool = False) -> Dict[str, Any]:
+        """
+        Unpause a specific component.
+        
+        Args:
+            component_id: ID of the component to unpause
         """
         try:
+            expected_components = await self.get_components(component)
             await self.queue.connect()
+            if disable:
+                action = "unpause"
+            else:
+                action = "pause"
+            try:
+                await self.queue.js.stream_info(f"CONTROL_RESPONSE_{action.upper()}")
+            except Exception:
+                #print(f"Creating CONTROL_RESPONSE_{action.upper()} stream...")
+                await self.queue.js.add_stream(name=f"CONTROL_RESPONSE_{action.upper()}",
+                                                subjects=[f"control.response.{action}"])
             
-            control_message = {
-                "command": "pause",
-                "target": processor_type
-            }
+            # Create subscription for responses
+            response_sub = await self.queue.js.pull_subscribe(
+                subject=f"control.response.{action}",
+                durable=None,
+                stream=f"CONTROL_RESPONSE_{action.upper()}",
+                config=ConsumerConfig(
+                    deliver_policy=DeliverPolicy.NEW,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_deliver=1
+                )
+            )
             
-            if component_id:
-                if processor_type == 'worker':
-                    control_message["target_worker_id"] = component_id
-                else:
-                    control_message["target_processor_id"] = component_id
+            # Send unpause command
+            control_message = {"command": action}
+            
+            # Determine subject based on target
+            if component == "worker" or component == "jobprocessor" or component == "dataprocessor":
+                subject = f"function.control.all_{component}"
+            elif component == "all":
+                subject = "function.control.all"
+            else:
+                subject = f"function.control.{component}"
             
             await self.queue.publish_message(
-                subject="function.control",
+                subject=subject,
                 stream="FUNCTION_CONTROL",
                 message=control_message
             )
             
-            target_desc = f"{processor_type} {component_id}" if component_id else processor_type
-            return {"status": "success", "message": f"Pause command sent to {target_desc}"}
-        except Exception as e:
-            logger.error(f"Failed to send pause command: {e}")
-            return {"status": "error", "message": str(e)}
-        finally:
-            await self.queue.close()
-
-    async def unpause_processor(self, processor_type: str, component_id: str = None) -> Dict[str, Any]:
-        """
-        Unpause a specific processor or all processors.
-        
-        Args:
-            processor_type: Type of processor to unpause ('dataprocessor', 'jobprocessor', or 'worker')
-            component_id: Optional specific component ID to target
-        """
-        try:
-            await self.queue.connect()
+            # Wait for responses
+            responses = []
+            received_components = set()
+            max_wait_time = 15
+            start_time = asyncio.get_event_loop().time()
             
-            control_message = {
-                "command": "unpause",
-                "target": processor_type
+            while len(received_components) < len(expected_components.data):
+                if (asyncio.get_event_loop().time() - start_time) > max_wait_time:
+                    break
+                    
+                try:
+                    msgs = await response_sub.fetch(batch=10, timeout=1)
+                    for msg in msgs:
+                        try:
+                            data = json.loads(msg.data.decode())
+                            if data.get('component_id') and 'success' in data:
+                                responses.append(data)
+                                received_components.add(data['component_id'].encode())
+                            await msg.ack()
+                        except json.JSONDecodeError:
+                            logger.error(f"Failed to decode message: {msg.data}")
+                            await msg.ack()
+                        
+                except Exception as e:
+                    if "timeout" not in str(e).lower():
+                        logger.error(f"Error fetching messages: {e}")
+                        logger.exception(e)
+                    await asyncio.sleep(0.1)
+            
+            # Get list of components that didn't respond
+            missing_components = []
+            for comp in expected_components.data:
+                if comp.encode() not in received_components:
+                    print("not in received")
+                    missing_components.append(comp)
+            
+            return {
+                "status": "success" if responses else "warning",
+                "message": f"{action.capitalize()} command sent to {component}",
+                "responses": responses,
+                "missing_responses": missing_components
             }
             
-            if component_id:
-                if processor_type == 'worker':
-                    control_message["target_worker_id"] = component_id
-                else:
-                    control_message["target_processor_id"] = component_id
-            
-            await self.queue.publish_message(
-                subject="function.control",
-                stream="FUNCTION_CONTROL",
-                message=control_message
-            )
-            
-            target_desc = f"{processor_type} {component_id}" if component_id else processor_type
-            return {"status": "success", "message": f"Unpause command sent to {target_desc}"}
         except Exception as e:
             logger.error(f"Failed to send unpause command: {e}")
+            logger.exception(e)
+            
             return {"status": "error", "message": str(e)}
         finally:
+            if 'response_sub' in locals():
+                try:
+                    await response_sub.unsubscribe()
+                except:
+                    pass
             await self.queue.close()
-
-    async def get_component_report(self, component_type: str, component_id: str = None) -> Dict[str, Any]:
+    
+    async def get_component_report(self, component_id: str = None) -> Dict[str, Any]:
         """
         Get a report from a specific component or all components of a type.
         """
         try:
             await self.queue.connect()
             
-            # Create a subscription to receive the response before sending the request
+            # Ensure response stream exists
+            try:
+                await self.queue.js.stream_info("CONTROL_RESPONSE_REPORT")
+            except Exception:
+                await self.queue.js.add_stream(
+                    name="CONTROL_RESPONSE_REPORT",
+                    subjects=["control.response.report"]
+                )
+
+            # Create ephemeral subscription for responses
             response_sub = await self.queue.js.pull_subscribe(
-                subject="function.control.response",
-                durable=None,  # Ephemeral consumer
-                stream="FUNCTION_CONTROL_RESPONSE",
+                subject="control.response.report",
+                durable=None,
+                stream="CONTROL_RESPONSE_REPORT",
                 config=ConsumerConfig(
                     deliver_policy=DeliverPolicy.NEW,
                     ack_policy=AckPolicy.EXPLICIT,
@@ -923,17 +1173,21 @@ class ClientAPI:
             # Send the report request
             control_message = {
                 "command": "report",
-                "target": component_type
+                "target": component_id
             }
-            
-            if component_id:
-                if component_type == 'worker':
-                    control_message["target_worker_id"] = component_id
-                else:
-                    control_message["target_processor_id"] = component_id
-            
+            if component_id == 'all':
+                subject = f"function.control.all_{component_id}"
+            else:
+                control_message["target_worker_id"] = component_id
+                subject = f"function.control.{component_id}"            
             await self.queue.publish_message(
-                subject="function.control",
+                subject=subject,
+                stream="FUNCTION_CONTROL",
+                message=control_message
+            )
+
+            await self.queue.publish_message(
+                subject=subject,
                 stream="FUNCTION_CONTROL",
                 message=control_message
             )
@@ -970,12 +1224,76 @@ class ClientAPI:
                     await asyncio.sleep(0.1)
                         
             if not responses:
-                return {"status": "error", "message": f"No response received from {component_type} after {timeout} seconds"}
+                return {"status": "error", "message": f"No response received from {component_id} after {timeout} seconds"}
             
             return {"status": "success", "reports": responses}
             
         except Exception as e:
             logger.error(f"Failed to get report: {e}")
+            return {"status": "error", "message": str(e)}
+        finally:
+            # Clean up subscription
+            if 'response_sub' in locals():
+                try:
+                    await response_sub.unsubscribe()
+                except:
+                    pass
+            await self.queue.close()
+
+    async def ping_component(self, component_id: str) -> Dict[str, Any]:
+        """
+        Send a ping to a specific component and wait for pong response.
+        
+        Args:
+            component_id: ID of the component to ping
+        """
+        try:
+            # Ensure streams exist
+            await self.queue.connect()
+            try:
+                await self.queue.js.stream_info("CONTROL_RESPONSE_PING")
+            except Exception as e:
+                # Create stream if it doesn't exist
+                #print("Creating CONTROL_RESPONSE_PING stream...")
+                await self.queue.js.add_stream(name="CONTROL_RESPONSE_PING",
+                                             subjects=["control.response.ping"])
+            
+            
+            # Create a subscription for responses before sending command
+            response_sub = await self.queue.js.pull_subscribe(
+                subject="control.response.ping",
+                durable=None,  # Ephemeral consumer
+                stream="CONTROL_RESPONSE_PING",
+                config=ConsumerConfig(
+                    deliver_policy=DeliverPolicy.NEW,
+                    ack_policy=AckPolicy.EXPLICIT,
+                    max_deliver=1
+                )
+            )
+            
+            # Send the ping request
+            control_message = {
+                "command": "ping",
+            }
+            
+            await self.queue.publish_message(
+                subject=f"function.control.{component_id}",
+                stream="FUNCTION_CONTROL",
+                message=control_message
+            )
+            
+            # Wait a bit for the message to be processed
+            await asyncio.sleep(0.1)
+            responses = await self._wait_for_responses(response_sub)
+            
+            return {
+                "status": "success" if responses else "warning",
+                "message": f"Ping command sent to {component_id}",
+                "responses": responses
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to ping component: {e}")
             return {"status": "error", "message": str(e)}
         finally:
             # Clean up subscription

@@ -30,7 +30,29 @@ class H3xReconConsole(CommandHandlers):
                 'del': None,
                 'import': None,
             },
+            'add': {
+                'domain': None,
+                'ip': None,
+                'url': None,
+            },
+            'del': {
+                'domain': None,
+                'ip': None,
+                'url': None,
+            },
             'system': {
+                'list': {
+                    'worker': None,
+                    'jobprocessor': None,
+                    'dataprocessor': None,
+                    'all': None,
+                },
+                'status': {
+                    'worker': None,
+                    'jobprocessor': None,
+                    'dataprocessor': None,
+                    'all': None,
+                },
                 'killjob': None,
                 'cache': {
                     'flush': None,
@@ -40,12 +62,6 @@ class H3xReconConsole(CommandHandlers):
                     'show': None,
                     'messages': None,
                     'flush': None,
-                    'lock': None,
-                    'unlock': None,
-                },
-                'workers': {
-                    'status': None,
-                    'list': None,
                 },
                 'pause': {
                     'dataprocessor': None,
@@ -61,7 +77,8 @@ class H3xReconConsole(CommandHandlers):
                     'worker': None,
                     'jobprocessor': None,
                     'dataprocessor': None,
-                }
+                },
+                'ping': None,
             },
             'config': {
                 'add': {
@@ -343,7 +360,7 @@ class H3xReconConsole(CommandHandlers):
     def get_headers_for_type(self, type_name):
         """Return headers based on asset type"""
         headers_map = {
-            'domains': ['Domain', 'IP', 'Status'],
+            'domains': ['Domain', 'IP', 'CatchAll'],
             'ips': ['IP', 'Hostname', 'Status'],
             'urls': ['URL', 'Status', 'Title'],
             'services': ['IP', 'Port', 'Service', 'Version'],
@@ -421,6 +438,36 @@ class H3xReconConsole(CommandHandlers):
             params = [p for p in parts[3:] if p != '--force']
             await self.handle_sendjob_command(function, target, self.current_program, force, params)
             
+        elif cmd == 'add' and len(parts) > 2:
+            if not self.current_program:
+                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
+                return
+                
+            type_name = parts[1]
+            item = parts[2]
+            if type_name not in ['domain', 'ip', 'url']:
+                self.console.print(f"[red]Invalid type '{type_name}'. Must be one of: domain, ip, url[/]")
+                return
+                
+            await self.handle_add_commands(type_name, self.current_program, item)
+            
+        elif cmd == 'del' and len(parts) > 2:
+            if not self.current_program:
+                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
+                return
+                
+            type_name = parts[1]
+            item = parts[2]
+            if type_name not in ['domain', 'ip', 'url']:
+                self.console.print(f"[red]Invalid type '{type_name}'. Must be one of: domain, ip, url[/]")
+                return
+                
+            result = await self.api.remove_item(type_name, self.current_program, item)
+            if result:
+                self.console.print(f"[green]Successfully removed {type_name} '{item}' from program '{self.current_program}'[/]")
+            else:
+                self.console.print(f"[red]Failed to remove {type_name} '{item}'[/]")
+            
         else:
             self.console.print(f"[red]Unknown command or missing arguments: {command}[/]")
 
@@ -448,3 +495,13 @@ class H3xReconConsole(CommandHandlers):
                 continue
             except EOFError:
                 break
+
+    async def handle_system_commands(self, arg1: str, arg2: str, args: list = None) -> None:
+        """Handle system management commands by delegating to appropriate handler"""
+        if arg1 == 'queue' and len(args) == 0:
+            await self.handle_system_commands_with_3_args(arg1, arg2, args[0] if args else None)
+        else:
+            if len(args) == 0:
+                await self.handle_system_commands_with_2_args(arg1, arg2)
+            else:
+                await self.handle_system_commands_with_3_args(arg1, arg2, args[0])
