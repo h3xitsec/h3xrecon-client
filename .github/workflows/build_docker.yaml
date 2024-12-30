@@ -1,4 +1,4 @@
-name: Build and release H3xRecon Client
+name: Build and Push h3xrecon client docker image
 on:
   workflow_dispatch:
   workflow_call:
