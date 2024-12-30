@@ -24,22 +24,25 @@ class CommandHandlers:
         # Program commands
         table.add_row("use <program>", "Set current working program")
         table.add_row("program list", "List all programs")
-        table.add_row("program add <name>", "Add a new program")
-        table.add_row("program del <name>", "Delete a program")
+        table.add_row("program add <n>", "Add a new program")
+        table.add_row("program del <n>", "Delete a program")
         table.add_row("program import <file>", "Import programs from file")
         
         # System commands
-        table.add_row("system list (worker|jobprocessor|dataprocessor|all)", "List components")
-        table.add_row("system status (show|flush) (worker|jobprocessor|dataprocessor|all)", "Show/flush component status")
-        table.add_row("system killjob <worker_id|all>", "Kill job on worker")
-        table.add_row("system cache (flush|show)", "Manage system cache")
         table.add_row("system queue show (worker|job|data)", "Show queue information")
         table.add_row("system queue messages (worker|job|data)", "Show queue messages")
         table.add_row("system queue flush (worker|job|data)", "Flush queue")
-        table.add_row("system pause (dataprocessor|jobprocessor|worker)", "Pause component")
-        table.add_row("system unpause (dataprocessor|jobprocessor|worker)", "Unpause component")
-        table.add_row("system report (worker|jobprocessor|dataprocessor)", "Get component report")
-        table.add_row("system ping <component_id>", "Ping a component")
+        table.add_row("system cache (flush|show)", "Manage system cache")
+        table.add_row("system status flush (all|worker|jobprocessor|dataprocessor)", "Flush system status")
+        
+        # Worker commands
+        table.add_row("worker list (worker|jobprocessor|dataprocessor|all)", "List components")
+        table.add_row("worker status (worker|jobprocessor|dataprocessor|componentid|all)", "Show component status")
+        table.add_row("worker killjob (componentid|all)", "Kill job on worker")
+        table.add_row("worker ping <componentid>", "Ping a component")
+        table.add_row("worker pause (worker|jobprocessor|dataprocessor|componentid|all)", "Pause component")
+        table.add_row("worker unpause (worker|jobprocessor|dataprocessor|componentid|all)", "Unpause component")
+        table.add_row("worker report <componentid>", "Get component report")
         
         # Config commands
         table.add_row("config add cidr <cidr>", "Add CIDR to current program")
@@ -103,148 +106,32 @@ class CommandHandlers:
     async def handle_system_commands_with_2_args(self, arg1: str, arg2: str) -> None:
         """Handle system management commands"""
         try:
-            if arg1 == 'killjob':
-                try:
-                    if arg2 == 'all':
-                        arg2 = 'worker'
-                    response = await self.api.kill_job(arg2)
-                    
-                    # Display command status
-                    if response['status'] == 'success':
-                        self.console.print("[green]Kill command executed successfully[/]")
-                    elif response['status'] == 'warning':
-                        self.console.print("[yellow]Kill command executed with warnings[/]")
-                    else:
-                        self.console.print(f"[red]Error executing kill command: {response.get('message')}[/]")
-                        return
-                    
-                    # Display responses from components
-                    if response.get('responses'):
-                        self.console.print("\nResponses from components:")
-                        for resp in response['responses']:
-                            comp_id = resp.get('component_id', 'unknown')
-                            status = "[green]success[/]" if resp.get('success') else "[red]failed[/]"
-                            tasks = resp.get('tasks_cancelled', 0)
-                            self.console.print(f"{comp_id}: {status} ({tasks} tasks cancelled)")
-                            if resp.get('error'):
-                                self.console.print(f"  Error: {resp['error']}")
-                    
-                    # Display missing responses
-                    if response.get('missing_responses'):
-                        self.console.print("\n[yellow]No response received from:[/]")
-                        for comp in response['missing_responses']:
-                            self.console.print(f"- {comp}")
-                            
-                except Exception as e:
-                    self.console.print(f"[red]Error executing kill command: {str(e)}[/]")
-
-            elif arg1 in ['list']:
-                # Handle both workers and processors
-                valid_components = ['worker', 'jobprocessor', 'dataprocessor', 'all']
-                if not arg2 or arg2 not in valid_components:
-                    self.console.print(f"Error: Must specify component: {', '.join(valid_components)}")
-                    raise typer.Exit(1)
-                else:  # list
-                    components = await self.api.get_components(arg2)
-                    if not components.success:
-                        self.console.print(f"[red]Error getting components: {components.error}[/]")
-                        return
-                        
-                    if components.data:
-                        for component in components.data:
-                            self.console.print(f"- {component}")
-                    else:
-                        self.console.print("[yellow]No active components found[/]")
-            
-            elif arg1 in ['pause', 'unpause']:
-                # Send pause/unpause command
-                result = await self.api.pause_component(component=arg2) if arg1 == 'pause' else await self.api.pause_component(component=arg2, disable=True)
-                
-                # Display the command result
-                if result['status'] == 'success':
-                    self.console.print(f"[green]{result['message']}[/]")
-                    
-                    # Display responses from components
-                    if result.get('responses'):
-                        self.console.print("\nResponses from components:")
-                        
-                        for resp in result['responses']:
-                            comp_id = resp.get('component_id')
-                            status = "[green]success[/]" if resp.get('success') else "[red]failed[/]"
-                            self.console.print(f"{comp_id}: {status}")
-                            if resp.get('error'):
-                                self.console.print(f"  Error: {resp['error']}")
-                        
-                        # Check for missing responses
-                        if result.get('missing_responses'):
-                            self.console.print("\n[yellow]No response received from:[/]")
-                            for comp in result['missing_responses']:
-                                self.console.print(f"- {comp}")
-                    else:
-                        self.console.print("[yellow]No responses received from components[/]")
-                else:
-                    self.console.print(f"[red]Error: {result['message']}[/]")
-
-            elif arg1 == 'cache':
+            if arg1 == 'cache':
                 if arg2 == 'flush':
                     await self.api.flush_cache()
                     self.console.print("[green]Cache flushed[/]")
                 elif arg2 == 'show':
                     keys = await self.api.show_cache_keys_values()
                     [self.console.print(k) for k in keys]
-            elif arg1 == 'report':
-                result = await self.api.get_component_report(arg2)
-                if result['status'] == 'success':
-                    for report in result['reports']:
-                        if 'data' in report:
-                            self.console.print(f"\nReport from {report.get('processor_id', 'unknown')}:")
-                            self.console.print(report['data'])
-                else:
-                    self.console.print(f"[red]Error: {result['message']}[/]")
-                return
-            elif arg1 == 'ping':
-                result = await self.api.ping_component(arg2)
-                if result['status'] == 'success':
-                    self.console.print(f"[green]{result['message']}[/]")
-                    if result.get('responses'):
-                        for resp in result['responses']:
-                            status = "[green]success[/]" if resp.get('command') == 'pong' else "[red]failed[/]"
-                            self.console.print(f"Component {resp.get('component_id')}: {resp.get('command').upper()}")
-                else:
-                    self.console.print(f"[red]Error: {result['message']}[/]")
+            else:
+                self.console.print(f"[red]Error: Invalid system command: {arg1}[/]")
 
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
-
     async def handle_system_commands_with_3_args(self, arg1: str, arg2: str, arg3: str = None) -> None:
         """Handle system management commands"""
         try:
-            if arg1 == 'status':
-                if not arg2 or arg2 not in ['show', 'flush']:
-                    self.console.print(f"[red]Error: Must specify 'show' or 'flush' for {arg1} command[/]")
-                    return
-
+            if arg1 == 'status' and arg2 == 'flush':
                 components = await self.api.get_components(arg3)
                 if components.success:
                     for component in components.data:
-                        if arg2 == 'flush':
-                            # Handle status flush command
-                            result = await self.api.flush_component_status(component)
-                            if result.success:
-                                self.console.print("[green]Status flushed successfully[/]")
-                            else:
-                                self.console.print(f"[red]Error flushing status: {result.error}[/]")
-                        else:  #show
-                            result = await self.api.get_component_status(component)
-                            if result.success:
-                                self.console.print(f"{component}: {result.data}")
-                            else:
-                                self.console.print(f"[red]Error getting status: {result.error}[/]")
+                        result = await self.api.flush_component_status(component)
+                        if result.success:
+                            self.console.print("[green]Status flushed successfully[/]")
+                        else:
+                            self.console.print(f"[red]Error flushing status: {result.error}[/]")
                 return
-            
-            
-
             elif arg1 == 'queue':
                 # Determine which stream to use
                 stream = None
@@ -254,57 +141,28 @@ class CommandHandlers:
                     stream = 'FUNCTION_OUTPUT'
                 elif arg3 == 'data':
                     stream = 'RECON_DATA'
+                else:
+                    self.console.print(f"[red]Error: Invalid stream type: {arg3}[/]")
+                    return
 
                 if arg2 == 'show':
-                    try:
-                        result = await self.client_queue.get_stream_info(stream)
-                        if result:
-                            # Create rich table for display
-                            table = Table()
-                            headers = result[0].keys()
-                            for header in headers:
-                                table.add_column(header.capitalize())
-                            
-                            for row in result:
-                                table.add_row(*[str(val) for val in row.values()])
-                            
-                            self.console.print(table)
-                        else:
-                            self.console.print("[yellow]No queue information available[/]")
-                    except StreamLockedException as e:
-                        self.console.print(f"[red]Error: Stream is locked - {str(e)}[/]")
-                    except Exception as e:
-                        self.console.print(f"[red]Error getting queue info: {str(e)}[/]")
-
+                    info = await self.client_queue.get_stream_info(stream)
+                    self.console.print(info)
                 elif arg2 == 'messages':
                     try:
-                        result = await self.client_queue.get_stream_messages(stream)
-                        if result:
-                            # Create rich table for display
-                            table = Table()
-                            headers = result[0].keys()
-                            for header in headers:
-                                table.add_column(header.capitalize())
-                            
-                            for row in result:
-                                table.add_row(*[str(val) for val in row.values()])
-                            
-                            self.console.print(table)
-                        else:
-                            self.console.print("[yellow]No messages found[/]")
-                    except StreamLockedException as e:
-                        self.console.print(f"[red]Error: Stream is locked - {str(e)}[/]")
-                    except Exception as e:
-                        self.console.print(f"[red]Error getting messages: {str(e)}[/]")
-
+                        messages = await self.client_queue.get_stream_messages(stream)
+                        for msg in messages:
+                            self.console.print(msg)
+                    except StreamLockedException:
+                        self.console.print("[red]Error: Stream is locked[/]")
                 elif arg2 == 'flush':
-                    try:
-                        result = await self.client_queue.flush_stream(stream)
-                        self.console.print(f"[green]{result}[/]")
-                    except StreamLockedException as e:
-                        self.console.print(f"[red]Error: Stream is locked - {str(e)}[/]")
-                    except Exception as e:
-                        self.console.print(f"[red]Error flushing stream: {str(e)}[/]")
+                    await self.client_queue.purge_stream(stream)
+                    self.console.print(f"[green]Stream {stream} flushed[/]")
+                else:
+                    self.console.print(f"[red]Error: Invalid queue command: {arg2}[/]")
+            else:
+                self.console.print(f"[red]Error: Invalid system command: {arg1}[/]")
+
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
@@ -555,6 +413,144 @@ class CommandHandlers:
                 self.console.print(f"[green]Successfully added {len(items)} {type_name}(s) to program '{program}'[/]")
             else:
                 self.console.print(f"[red]Error adding {type_name}(s): {result.error}[/]")
+
+        except Exception as e:
+            self.console.print(f"[red]Error: {str(e)}[/]") 
+
+    async def handle_worker_commands(self, arg1: str, arg2: str) -> None:
+        """Handle worker management commands"""
+        try:
+            if arg1 == 'killjob':
+                try:
+                    if arg2 == 'all':
+                        arg2 = 'worker'
+                    response = await self.api.kill_job(arg2)
+                    
+                    # Display command status
+                    if response['status'] == 'success':
+                        self.console.print("[green]Kill command executed successfully[/]")
+                    elif response['status'] == 'warning':
+                        self.console.print("[yellow]Kill command executed with warnings[/]")
+                    else:
+                        self.console.print(f"[red]Error executing kill command: {response.get('message')}[/]")
+                        return
+                    
+                    # Display responses from components
+                    if response.get('responses'):
+                        self.console.print("\nResponses from components:")
+                        for resp in response['responses']:
+                            comp_id = resp.get('component_id', 'unknown')
+                            status = "[green]success[/]" if resp.get('success') else "[red]failed[/]"
+                            tasks = resp.get('tasks_cancelled', 0)
+                            self.console.print(f"{comp_id}: {status} ({tasks} tasks cancelled)")
+                            if resp.get('error'):
+                                self.console.print(f"  Error: {resp['error']}")
+                    
+                    # Display missing responses
+                    if response.get('missing_responses'):
+                        self.console.print("\n[yellow]No response received from:[/]")
+                        for comp in response['missing_responses']:
+                            self.console.print(f"- {comp}")
+                            
+                except Exception as e:
+                    self.console.print(f"[red]Error executing kill command: {str(e)}[/]")
+
+            elif arg1 == 'list':
+                # Handle both workers and processors
+                valid_components = ['worker', 'jobprocessor', 'dataprocessor', 'all']
+                if not arg2 or arg2 not in valid_components:
+                    self.console.print(f"Error: Must specify component: {', '.join(valid_components)}")
+                    raise typer.Exit(1)
+                else:
+                    components = await self.api.get_components(arg2)
+                    if not components.success:
+                        self.console.print(f"[red]Error getting components: {components.error}[/]")
+                        return
+                        
+                    if components.data:
+                        for component in components.data:
+                            self.console.print(f"- {component.decode() if isinstance(component, bytes) else component}")
+                    else:
+                        self.console.print("[yellow]No active components found[/]")
+            elif arg1 == 'status':
+                components = await self.api.get_components(arg2)
+                if components.success:
+                    for component in components.data:
+                        result = await self.api.get_component_status(component)
+                        if result.success:
+                            self.console.print(f"{component}: {result.data}")
+                        else:
+                            self.console.print(f"[red]Error getting status: {result.error}[/]")
+                return
+            elif arg1 in ['pause', 'unpause']:
+                # Send pause/unpause command
+                result = await self.api.pause_component(component=arg2) if arg1 == 'pause' else await self.api.pause_component(component=arg2, disable=True)
+                
+                # Display the command result
+                if result['status'] == 'success':
+                    self.console.print(f"[green]{result['message']}[/]")
+                    
+                    # Display responses from components
+                    if result.get('responses'):
+                        self.console.print("\nResponses from components:")
+                        
+                        for resp in result['responses']:
+                            comp_id = resp.get('component_id')
+                            status = "[green]success[/]" if resp.get('success') else "[red]failed[/]"
+                            self.console.print(f"{comp_id}: {status}")
+                            if resp.get('error'):
+                                self.console.print(f"  Error: {resp['error']}")
+                        
+                        # Check for missing responses
+                        if result.get('missing_responses'):
+                            self.console.print("\n[yellow]No response received from:[/]")
+                            for comp in result['missing_responses']:
+                                self.console.print(f"- {comp}")
+                    else:
+                        self.console.print("[yellow]No responses received from components[/]")
+                else:
+                    self.console.print(f"[red]Error: {result['message']}[/]")
+
+            elif arg1 == 'report':
+                result = await self.api.get_component_report(arg2)
+                if result['status'] == 'success':
+                    for report in result['reports']:
+                        if 'data' in report:
+                            self.console.print(f"\nReport from {report.get('data', {}).get('component', {}).get('id', 'unknown')}:")
+                            self.console.print(report['data'])
+                else:
+                    self.console.print(f"[red]Error: {result['message']}[/]")
+                return
+
+            elif arg1 == 'ping':
+                result = await self.api.ping_component(arg2)
+                if result['status'] == 'success':
+                    self.console.print(f"[green]{result['message']}[/]")
+                    if result.get('responses'):
+                        for resp in result['responses']:
+                            status = "[green]success[/]" if resp.get('command') == 'pong' else "[red]failed[/]"
+                            self.console.print(f"Component {resp.get('component_id')}: {resp.get('command').upper()}")
+                else:
+                    self.console.print(f"[red]Error: {result['message']}[/]")
+
+        except Exception as e:
+            self.console.print(f"[red]Error: {str(e)}[/]")
+
+    async def handle_worker_commands_with_3_args(self, arg1: str, arg2: str, arg3: str = None) -> None:
+        """Handle worker management commands"""
+        try:
+            if arg1 == 'status':
+                components = await self.api.get_components(arg3)
+                if components.success:
+                    for component in components.data:
+                        result = await self.api.get_component_status(component)
+                        if result.success:
+                            self.console.print(f"{component}: {result.data}")
+                        else:
+                            self.console.print(f"[red]Error getting status: {result.error}[/]")
+                return
+            else:
+                self.console.print(f"[red]Error: Invalid worker command: {arg1}[/]")
 
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]") 

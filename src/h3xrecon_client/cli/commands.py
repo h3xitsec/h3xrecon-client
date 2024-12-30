@@ -52,24 +52,18 @@ def program_commands(
 
 @app.command("system")
 def system_commands(
-    # arg1: str = typer.Argument(..., help="Action: list/status/killjob/cache/queue/pause/unpause/report/ping"),
-    # arg2: str = typer.Argument(None, help="Component: worker/jobprocessor/dataprocessor/all"),
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
 ):
     """
     System management commands
     
     Actions:
-    - list/status: Display component information (worker/jobprocessor/dataprocessor/all)
-    - queue: Manage message queues (show/messages/flush/lock/unlock worker/job/data)
+    - queue: Manage message queues (show/messages/flush worker/job/data)
     - cache: Manage system cache (flush/show)
-    - killjob: Kill specific job (requires worker_id or 'all')
-    - pause/unpause: Control system components
-    - report: Get component reports
-    - ping: Ping a specific component
+    - status: Control system status (flush all/worker/jobprocessor/dataprocessor)
     """
     
-    if args[0] in ['killjob', 'pause', 'unpause', 'ping', 'list', 'cache', 'report']:
+    if args[0] in ['cache']:
         asyncio.run(handlers.handle_system_commands_with_2_args(args[0], args[1]))
         return
     elif args[0] in ['queue', 'status']:
@@ -77,6 +71,30 @@ def system_commands(
         return
     else:
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
+        raise typer.Exit(1)
+
+@app.command("worker")
+def worker_commands(
+    args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
+):
+    """
+    Worker management commands
+    
+    Actions:
+    - list: List components (worker/jobprocessor/dataprocessor/all)
+    - status: Show component status (worker/jobprocessor/dataprocessor/componentid/all)
+    - killjob: Kill job on worker (componentid/all)
+    - ping: Ping a component (componentid)
+    - pause: Pause component (worker/jobprocessor/dataprocessor/componentid/all)
+    - unpause: Unpause component (worker/jobprocessor/dataprocessor/componentid/all)
+    - report: Get component report (componentid)
+    """
+    
+    if args[0] in ['killjob', 'pause', 'unpause', 'ping', 'list', 'report','status']:
+        asyncio.run(handlers.handle_worker_commands(args[0], args[1]))
+        return
+    else:
+        typer.echo("Error: Invalid command. Use 'h3xrecon worker --help' for more information.")
         raise typer.Exit(1)
 
 @app.command("config")
