@@ -81,7 +81,7 @@ class ClientAPI:
             logger.error(f"Redis error while getting component status: {str(e)}")
             return DbResult(success=False, error=str(e))
 
-    async def flush_component_status(self, component_type: str) -> DbResult:
+    async def flush_component_status(self, component_id: str) -> DbResult:
         """Flush component status from Redis.
         
         Args:
@@ -92,26 +92,13 @@ class ClientAPI:
         """
         try:
             if self.redis_status is None:
-                return DbResult(success=False, error="Redis connection not available")
-
-            # Get keys to delete based on component type
-            if component_type == "all":
-                keys_to_delete = self.redis_status.keys()
-            else:
-                prefix = f"{component_type}-"
-                prefix_bytes = prefix.encode()
-                keys_to_delete = [key for key in self.redis_status.keys() if key.startswith(prefix_bytes)]
-
-            # Delete the keys
-            if keys_to_delete:
-                for key in keys_to_delete:
-                    self.redis_status.delete(key)
-                return DbResult(success=True)
-            return DbResult(success=True, data="No keys to delete")
+                return CacheResult(success=False, error="Redis connection not available")
+            self.redis_status.delete(component_id)
+            return CacheResult(success=True)
 
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while flushing component status: {str(e)}")
-            return DbResult(success=False, error=str(e))
+            return CacheResult(success=False, error=str(e))
 
     async def get_workers(self):
         """Get workers with Redis error handling."""
@@ -898,7 +885,6 @@ class ClientAPI:
             received_components = set()
             max_wait_time = 15  # seconds
             start_time = asyncio.get_event_loop().time()
-            
             while len(received_components) < len(expected_components.data):
                 if (asyncio.get_event_loop().time() - start_time) > max_wait_time:
                     break
@@ -1118,8 +1104,7 @@ class ClientAPI:
             # Get list of components that didn't respond
             missing_components = []
             for comp in expected_components.data:
-                if comp.encode() not in received_components:
-                    print("not in received")
+                if comp not in received_components:
                     missing_components.append(comp)
             
             return {

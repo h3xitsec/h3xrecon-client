@@ -123,14 +123,15 @@ class CommandHandlers:
         """Handle system management commands"""
         try:
             if arg1 == 'status' and arg2 == 'flush':
-                components = await self.api.get_components(arg3)
-                if components.success:
-                    for component in components.data:
-                        result = await self.api.flush_component_status(component)
-                        if result.success:
-                            self.console.print("[green]Status flushed successfully[/]")
-                        else:
-                            self.console.print(f"[red]Error flushing status: {result.error}[/]")
+                if arg3 in ['worker', 'jobprocessor', 'dataprocessor', 'all']:
+                    components = await self.api.get_components(arg3)
+                    if components.success:
+                        for component in components.data:
+                            result = await self.api.flush_component_status(component.decode())
+                            if result.success:
+                                self.console.print(f"[green]Status flushed successfully for {component.decode()}[/]")
+                            else:
+                                self.console.print(f"[red]Error flushing status: {result.error}[/]")
                 return
             elif arg1 == 'queue':
                 # Determine which stream to use
@@ -440,10 +441,10 @@ class CommandHandlers:
                         self.console.print("\nResponses from components:")
                         for resp in response['responses']:
                             comp_id = resp.get('component_id', 'unknown')
-                            status = "[green]success[/]" if resp.get('success') else "[red]failed[/]"
-                            tasks = resp.get('tasks_cancelled', 0)
-                            self.console.print(f"{comp_id}: {status} ({tasks} tasks cancelled)")
-                            if resp.get('error'):
+                            success = resp.get('success')
+                            status = f"[green]{resp.get('status')}[/]" if success else "[red]failed[/]"
+                            self.console.print(f"{comp_id}: {status}")
+                            if not success:
                                 self.console.print(f"  Error: {resp['error']}")
                     
                     # Display missing responses
@@ -485,7 +486,6 @@ class CommandHandlers:
             elif arg1 in ['pause', 'unpause']:
                 # Send pause/unpause command
                 result = await self.api.pause_component(component=arg2) if arg1 == 'pause' else await self.api.pause_component(component=arg2, disable=True)
-                
                 # Display the command result
                 if result['status'] == 'success':
                     self.console.print(f"[green]{result['message']}[/]")
