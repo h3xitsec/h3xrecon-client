@@ -127,9 +127,9 @@ class CommandHandlers:
                     components = await self.api.get_components(arg3)
                     if components.success:
                         for component in components.data:
-                            result = await self.api.flush_component_status(component.decode())
+                            result = await self.api.flush_component_status(component)
                             if result.success:
-                                self.console.print(f"[green]Status flushed successfully for {component.decode()}[/]")
+                                self.console.print(f"[green]Status flushed successfully for {component}[/]")
                             else:
                                 self.console.print(f"[red]Error flushing status: {result.error}[/]")
                 return
@@ -470,7 +470,7 @@ class CommandHandlers:
                         
                     if components.data:
                         for component in components.data:
-                            self.console.print(f"- {component.decode() if isinstance(component, bytes) else component}")
+                            self.console.print(f"- {component if isinstance(component, bytes) else component}")
                     else:
                         self.console.print("[yellow]No active components found[/]")
             elif arg1 == 'status':
