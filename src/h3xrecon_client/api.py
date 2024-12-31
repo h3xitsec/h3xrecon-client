@@ -55,11 +55,9 @@ class ClientAPI:
             # Only get keys that start with 'worker-'
             all_keys = self.redis_status.keys()
             if type == "all":
-                prefix_bytes = None
                 components = all_keys
             elif type in ["recon", "parsing", "data"]:
-                prefix_bytes = type.encode()
-                components = [key.decode() for key in all_keys if key.startswith(prefix_bytes)]
+                components = [key for key in all_keys if key.startswith(type)]
             else:
                 return CacheResult(success=False, error="Invalid component type")
             
@@ -75,7 +73,7 @@ class ClientAPI:
                 return DbResult(success=False, error="Redis connection not available")
             status = self.redis_status.get(component_id)
             if status:
-                status = status.decode()
+                status = status
             return DbResult(success=True, data=status)
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting component status: {str(e)}")
@@ -191,7 +189,7 @@ class ClientAPI:
         """
         Show the Redis cache keys with values
         """
-        return [{'key': key.decode(), 'value': self.redis_cache.get(key).decode()} for key in self.redis_cache.keys()]
+        return [{'key': key, 'value': self.redis_cache.get(key)} for key in self.redis_cache.keys()]
         
     # Programs related methods
     async def get_programs(self):
@@ -1089,7 +1087,7 @@ class ClientAPI:
                             data = json.loads(msg.data.decode())
                             if data.get('component_id') and 'success' in data:
                                 responses.append(data)
-                                received_components.add(data['component_id'].encode())
+                                received_components.add(data['component_id'])
                             await msg.ack()
                         except json.JSONDecodeError:
                             logger.error(f"Failed to decode message: {msg.data}")
@@ -1102,6 +1100,7 @@ class ClientAPI:
                     await asyncio.sleep(0.1)
             # Get list of components that didn't respond
             missing_components = []
+
             for c in expected_components.data:
                 #comp = c.decode() if isinstance(c, bytes) else c
                 if c not in received_components:
