@@ -10,6 +10,7 @@ import shutil
 import json
 import os
 import asyncio
+import shlex
 
 __all__ = ['H3xReconConsole']
 
@@ -31,9 +32,15 @@ class H3xReconConsole(CommandHandlers):
                 'import': None,
             },
             'add': {
-                'domain': None,
-                'ip': None,
-                'url': None,
+                'domain': {
+                    '--stdin': None,
+                },
+                'ip': {
+                    '--stdin': None,
+                },
+                'url': {
+                    '--stdin': None,
+                },
             },
             'del': {
                 'domain': None,
@@ -41,44 +48,66 @@ class H3xReconConsole(CommandHandlers):
                 'url': None,
             },
             'system': {
-                'list': {
-                    'worker': None,
-                    'jobprocessor': None,
-                    'dataprocessor': None,
-                    'all': None,
+                'queue': {
+                    'show': {
+                        'worker': None,
+                        'job': None,
+                        'data': None,
+                    },
+                    'messages': {
+                        'worker': None,
+                        'job': None,
+                        'data': None,
+                    },
+                    'flush': {
+                        'worker': None,
+                        'job': None,
+                        'data': None,
+                    },
                 },
-                'status': {
-                    'worker': None,
-                    'jobprocessor': None,
-                    'dataprocessor': None,
-                    'all': None,
-                },
-                'killjob': None,
                 'cache': {
                     'flush': None,
                     'show': None,
                 },
-                'queue': {
-                    'show': None,
-                    'messages': None,
-                    'flush': None,
+                'status': {
+                    'flush': {
+                        'all': None,
+                        'recon': None,
+                        'parsing': None,
+                        'data': None,
+                    }
+                }
+            },
+            'worker': {
+                'list': {
+                    'recon': None,
+                    'parsing': None,
+                    'data': None,
+                    'all': None,
                 },
-                'pause': {
-                    'dataprocessor': None,
-                    'jobprocessor': None,
-                    'worker': None,
+                'status': {
+                    'recon': None,
+                    'parsing': None,
+                    'data': None,
+                    'all': None,
                 },
-                'unpause': {
-                    'dataprocessor': None,
-                    'jobprocessor': None,
-                    'worker': None,
-                },
-                'report': {
-                    'worker': None,
-                    'jobprocessor': None,
-                    'dataprocessor': None,
+                'killjob': {
+                    'all': None,
                 },
                 'ping': None,
+                'pause': {
+                    'recon': None,
+                    'parsing': None,
+                    'data': None,
+                    'all': None,
+                },
+                'unpause': {
+                    'recon': None,
+                    'parsing': None,
+                    'data': None,
+                    'all': None,
+                },
+                'report': None,
             },
             'config': {
                 'add': {
@@ -97,7 +126,9 @@ class H3xReconConsole(CommandHandlers):
                     'drop': None,
                 }
             },
-            'sendjob': None,
+            'sendjob': {
+                '--force': None,
+            },
             'list': {
                 'domains': {
                     '--resolved': None,
@@ -374,7 +405,13 @@ class H3xReconConsole(CommandHandlers):
         if not command:
             return
 
-        parts = command.split()
+        # Split command while preserving quoted strings
+        try:
+            parts = shlex.split(command)
+        except ValueError as e:
+            self.console.print(f"[red]Error parsing command: {str(e)}[/]")
+            return
+
         cmd = parts[0].lower()
 
         if cmd == 'use' and len(parts) > 1:
@@ -397,7 +434,13 @@ class H3xReconConsole(CommandHandlers):
             await self.handle_program_commands(parts[1], parts[2:])
             
         elif cmd == 'system' and len(parts) > 2:
-            await self.handle_system_commands(parts[1], parts[2], parts[3:])
+            if parts[1] == 'queue' and len(parts) > 3:
+                await self.handle_system_commands_with_3_args(parts[1], parts[2], parts[3])
+            else:
+                await self.handle_system_commands_with_2_args(parts[1], parts[2])
+            
+        elif cmd == 'worker' and len(parts) > 1:
+            await self.handle_worker_commands(parts[1], parts[2] if len(parts) > 2 else None)
             
         elif cmd == 'config' and len(parts) > 2:
             if not self.current_program:
@@ -417,8 +460,9 @@ class H3xReconConsole(CommandHandlers):
             severity = None
             if '--severity' in parts:
                 try:
-                    severity = parts[parts.index('--severity') + 1]
-                except IndexError:
+                    severity_idx = parts.index('--severity')
+                    severity = parts[severity_idx + 1]
+                except (ValueError, IndexError):
                     self.console.print("[red]Missing severity value[/]")
                     return
                     
@@ -444,12 +488,23 @@ class H3xReconConsole(CommandHandlers):
                 return
                 
             type_name = parts[1]
-            item = parts[2]
+            items = []
+            
+            if '--stdin' in parts:
+                # Read from stdin
+                import sys
+                for line in sys.stdin:
+                    line = line.strip()
+                    if line:  # Skip empty lines
+                        items.append(line)
+            else:
+                items = [parts[2]]
+                
             if type_name not in ['domain', 'ip', 'url']:
                 self.console.print(f"[red]Invalid type '{type_name}'. Must be one of: domain, ip, url[/]")
                 return
                 
-            await self.handle_add_commands(type_name, self.current_program, item)
+            await self.handle_add_commands(type_name, self.current_program, items)
             
         elif cmd == 'del' and len(parts) > 2:
             if not self.current_program:

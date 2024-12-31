@@ -25,7 +25,10 @@ class Cache:
         )
 
     def get(self, key):
-        return self.redis_cache.get(key)
+        value = self.redis_cache.get(key)
+        if value is not None:
+            return value.decode('utf-8')
+        return None
 
     def set(self, key, value):
         self.redis_cache.set(key, value)
@@ -34,7 +37,8 @@ class Cache:
         return self.redis_cache.ping()
     
     def keys(self):
-        return self.redis_cache.keys()
+        keys = self.redis_cache.keys()
+        return [key.decode('utf-8') for key in keys]
 
     def flushdb(self):
         self.redis_cache.flushdb()

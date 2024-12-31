@@ -33,15 +33,15 @@ class CommandHandlers:
         table.add_row("system queue messages (worker|job|data)", "Show queue messages")
         table.add_row("system queue flush (worker|job|data)", "Flush queue")
         table.add_row("system cache (flush|show)", "Manage system cache")
-        table.add_row("system status flush (all|worker|jobprocessor|dataprocessor)", "Flush system status")
+        table.add_row("system status flush (all|recon|parsing|data)", "Flush system status")
         
         # Worker commands
-        table.add_row("worker list (worker|jobprocessor|dataprocessor|all)", "List components")
-        table.add_row("worker status (worker|jobprocessor|dataprocessor|componentid|all)", "Show component status")
+        table.add_row("worker list (recon|parsing|data|all)", "List components")
+        table.add_row("worker status (recon|parsing|data|componentid|all)", "Show component status")
         table.add_row("worker killjob (componentid|all)", "Kill job on worker")
         table.add_row("worker ping <componentid>", "Ping a component")
-        table.add_row("worker pause (worker|jobprocessor|dataprocessor|componentid|all)", "Pause component")
-        table.add_row("worker unpause (worker|jobprocessor|dataprocessor|componentid|all)", "Unpause component")
+        table.add_row("worker pause (recon|parsing|data|componentid|all)", "Pause component")
+        table.add_row("worker unpause (recon|parsing|data|componentid|all)", "Unpause component")
         table.add_row("worker report <componentid>", "Get component report")
         
         # Config commands
@@ -123,22 +123,22 @@ class CommandHandlers:
         """Handle system management commands"""
         try:
             if arg1 == 'status' and arg2 == 'flush':
-                if arg3 in ['worker', 'jobprocessor', 'dataprocessor', 'all']:
+                if arg3 in ['recon', 'parsing', 'data', 'all']:
                     components = await self.api.get_components(arg3)
                     if components.success:
                         for component in components.data:
-                            result = await self.api.flush_component_status(component.decode())
+                            result = await self.api.flush_component_status(component)
                             if result.success:
-                                self.console.print(f"[green]Status flushed successfully for {component.decode()}[/]")
+                                self.console.print(f"[green]Status flushed successfully for {component}[/]")
                             else:
                                 self.console.print(f"[red]Error flushing status: {result.error}[/]")
                 return
             elif arg1 == 'queue':
                 # Determine which stream to use
                 stream = None
-                if arg3 == 'worker':
+                if arg3 == 'recon':
                     stream = 'FUNCTION_EXECUTE'
-                elif arg3 == 'job':
+                elif arg3 == 'parsing':
                     stream = 'FUNCTION_OUTPUT'
                 elif arg3 == 'data':
                     stream = 'RECON_DATA'
@@ -458,7 +458,7 @@ class CommandHandlers:
 
             elif arg1 == 'list':
                 # Handle both workers and processors
-                valid_components = ['worker', 'jobprocessor', 'dataprocessor', 'all']
+                valid_components = ['recon', 'parsing', 'data', 'all']
                 if not arg2 or arg2 not in valid_components:
                     self.console.print(f"Error: Must specify component: {', '.join(valid_components)}")
                     raise typer.Exit(1)
@@ -470,7 +470,7 @@ class CommandHandlers:
                         
                     if components.data:
                         for component in components.data:
-                            self.console.print(f"- {component.decode() if isinstance(component, bytes) else component}")
+                            self.console.print(f"- {component if isinstance(component, bytes) else component}")
                     else:
                         self.console.print("[yellow]No active components found[/]")
             elif arg1 == 'status':
