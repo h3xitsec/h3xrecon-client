@@ -769,8 +769,8 @@ class ClientAPI:
             await self.queue.connect()
             try:
                 await self.queue.publish_message(
-                    subject="recon.data",
-                    stream="RECON_DATA",
+                    subject="data.input",
+                    stream="DATA_INPUT",
                     message=message
                 )
                 return DbResult(success=True)
@@ -809,8 +809,8 @@ class ClientAPI:
 
         await self.queue.connect()
         await self.queue.publish_message(
-            subject="recon.data",
-            stream="RECON_DATA",
+            subject="data.input",
+            stream="DATA_INPUT",
             message=message
         )
         await self.queue.close()
@@ -855,15 +855,15 @@ class ClientAPI:
             
             # Determine subject based on target
             if target == "recon":
-                subject = "function.control.all_recon"
+                subject = "worker.control.all_recon"
             elif target == "all":
-                subject = "function.control.all"
+                subject = "worker.control.all"
             else:
-                subject = f"function.control.{target}"
+                subject = f"worker.control.{target}"
 
             await self.queue.publish_message(
                 subject=subject,
-                stream="FUNCTION_CONTROL",
+                stream="WORKER_CONTROL",
                 message=control_message
             )
 
@@ -957,8 +957,8 @@ class ClientAPI:
 
             await self.queue.connect()
             await self.queue.publish_message(
-                subject="function.execute",
-                stream="FUNCTION_EXECUTE",
+                subject="recon.input",
+                stream="RECON_INPUT",
                 message=message
             )
             await self.queue.close()
@@ -1058,15 +1058,15 @@ class ClientAPI:
             
             # Determine subject based on target
             if component == "recon" or component == "parsing" or component == "data":
-                subject = f"function.control.all_{component}"
+                subject = f"worker.control.all_{component}"
             elif component == "all":
-                subject = "function.control.all"
+                subject = "worker.control.all"
             else:
-                subject = f"function.control.{component}"
+                subject = f"worker.control.{component}"
             
             await self.queue.publish_message(
                 subject=subject,
-                stream="FUNCTION_CONTROL",
+                stream="WORKER_CONTROL",
                 message=control_message
             )
             
@@ -1160,19 +1160,19 @@ class ClientAPI:
                 "target": component_id
             }
             if component_id == 'all':
-                subject = f"function.control.all_{component_id}"
+                subject = f"worker.control.all_{component_id}"
             else:
                 control_message["target_worker_id"] = component_id
-                subject = f"function.control.{component_id}"            
+                subject = f"worker.control.{component_id}"            
             await self.queue.publish_message(
                 subject=subject,
-                stream="FUNCTION_CONTROL",
+                stream="WORKER_CONTROL",
                 message=control_message
             )
 
             await self.queue.publish_message(
                 subject=subject,
-                stream="FUNCTION_CONTROL",
+                stream="WORKER_CONTROL",
                 message=control_message
             )
             
@@ -1261,8 +1261,8 @@ class ClientAPI:
             }
             
             await self.queue.publish_message(
-                subject=f"function.control.{component_id}",
-                stream="FUNCTION_CONTROL",
+                subject=f"worker.control.{component_id}",
+                stream="WORKER_CONTROL",
                 message=control_message
             )
             

@@ -137,11 +137,11 @@ class CommandHandlers:
                 # Determine which stream to use
                 stream = None
                 if arg3 == 'recon':
-                    stream = 'FUNCTION_EXECUTE'
+                    stream = 'RECON_INPUT'
                 elif arg3 == 'parsing':
-                    stream = 'FUNCTION_OUTPUT'
+                    stream = 'PARSING_INPUT'
                 elif arg3 == 'data':
-                    stream = 'RECON_DATA'
+                    stream = 'DATA_INPUT'
                 else:
                     self.console.print(f"[red]Error: Invalid stream type: {arg3}[/]")
                     return
