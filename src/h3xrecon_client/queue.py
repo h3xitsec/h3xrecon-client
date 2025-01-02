@@ -51,7 +51,11 @@ class ClientQueue:
         await self.ensure_connected()
         if self.js is None:
             self.js = self.nc.jetstream()
-
+    async def purge_stream(self, stream_name: str) -> None:
+        """Purge a NATS stream"""
+        await self.ensure_jetstream()
+        await self.js.purge_stream(stream_name)
+        
     async def get_stream_info(self, stream_name: str = None):
         """Get information about NATS streams"""
         try:
