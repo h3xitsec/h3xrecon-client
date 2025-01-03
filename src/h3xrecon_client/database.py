@@ -1,14 +1,11 @@
 from .config import ClientConfig
-from collections import defaultdict
 from typing import Optional
 from dataclasses import dataclass
 from typing import Any
 from loguru import logger
-from typing import List, Dict, Any
-import asyncio
+from typing import List, Dict
 import asyncpg
 import asyncpg.exceptions
-from typing import Union
 
 @dataclass
 class DbResult:

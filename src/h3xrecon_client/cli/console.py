@@ -2,14 +2,11 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import NestedCompleter
 from prompt_toolkit.styles import Style
 from prompt_toolkit.shortcuts import clear
-from prompt_toolkit.keys import Keys
-from prompt_toolkit.filters import to_filter
 from .handlers import CommandHandlers
 import math
 import shutil
 import json
 import os
-import asyncio
 import shlex
 
 __all__ = ['H3xReconConsole']

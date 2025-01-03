@@ -5,7 +5,6 @@ from .cache import Cache, CacheResult
 from .queue import ClientQueue
 import redis
 import asyncio
-import time
 import json
 from nats.js.api import ConsumerConfig, DeliverPolicy, AckPolicy
 import redis.exceptions

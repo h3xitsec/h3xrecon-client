@@ -2,7 +2,6 @@ import os
 import json
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
-from loguru import logger
 @dataclass
 class RedisConfig:
     host: str

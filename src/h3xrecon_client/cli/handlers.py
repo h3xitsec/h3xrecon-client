@@ -3,7 +3,6 @@ from rich.table import Table
 from ..api import ClientAPI
 from ..queue import ClientQueue, StreamLockedException
 from typing import Optional, List, Dict, Any
-import asyncio
 import yaml
 import typer
 
