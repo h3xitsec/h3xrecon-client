@@ -322,7 +322,7 @@ def get_headers_for_type(type_name):
 
 @app.command("sendjob")
 def sendjob_command(
-    function: str = typer.Argument(..., help="Function to execute"),
+    function_name: str = typer.Argument(..., help="Function to execute"),
     target: str = typer.Argument(..., help="Target for the function"),
     force: bool = typer.Option(False, "--force", help="Force job execution"),
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
@@ -333,7 +333,7 @@ def sendjob_command(
     if not program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
-    asyncio.run(handlers.handle_sendjob_command(function, target, program, force, params or []))
+    asyncio.run(handlers.handle_sendjob_command(function_name, target, program, force, params or []))
 
 @app.command("console")
 def console_mode():

@@ -275,7 +275,7 @@ class CommandHandlers:
         # Use the same data fetching logic as list commands
         return await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
 
-    async def handle_sendjob_command(self, function: str, target: str, program: str, 
+    async def handle_sendjob_command(self, function_name: str, target: str, program: str, 
                                    force: bool = False, params: List[str] = None) -> None:
         """Handle sendjob command"""
         try:
@@ -290,7 +290,7 @@ class CommandHandlers:
                 return
 
             result = await self.api.send_job(
-                function_name=function,
+                function_name=function_name,
                 program_name=program,
                 params={
                     "target": target,

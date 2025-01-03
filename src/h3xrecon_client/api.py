@@ -950,7 +950,7 @@ class ClientAPI:
 
             message = {
                 "force": force,
-                "function": function_name,
+                "function_name": function_name,
                 "program_id": program_id,
                 "params": params
             }

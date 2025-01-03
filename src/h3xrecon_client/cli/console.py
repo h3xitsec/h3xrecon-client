@@ -476,11 +476,11 @@ class H3xReconConsole(CommandHandlers):
                 self.console.print("[red]No program selected. Use 'use <program>' first[/]")
                 return
                 
-            function = parts[1]
+            function_name = parts[1]
             target = parts[2]
             force = '--force' in parts
             params = [p for p in parts[3:] if p != '--force']
-            await self.handle_sendjob_command(function, target, self.current_program, force, params)
+            await self.handle_sendjob_command(function_name, target, self.current_program, force, params)
             
         elif cmd == 'add' and len(parts) > 2:
             if not self.current_program:
