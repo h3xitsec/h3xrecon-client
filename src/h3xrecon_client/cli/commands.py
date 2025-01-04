@@ -61,12 +61,26 @@ def system_commands(
     - queue: Manage message queues (show/messages/flush worker/job/data)
     - cache: Manage system cache (flush/show)
     - status: Control system status (flush all/worker/jobprocessor/dataprocessor)
+    - database: Manage database (backup/restore path/to/file)
     """
     
-    if args[0] in ['cache']:
+    if not args or len(args) < 2:
+        typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
+        raise typer.Exit(1)
+        
+    if args[0] == 'cache':
         asyncio.run(handlers.handle_system_commands_with_2_args(args[0], args[1]))
         return
+    elif args[0] == 'database':
+        if len(args) != 3:
+            typer.echo("Error: Invalid database command. Usage: h3xrecon system database (backup|restore) path/to/file")
+            raise typer.Exit(1)
+        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2]))
+        return
     elif args[0] in ['queue', 'status']:
+        if len(args) != 3:
+            typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
+            raise typer.Exit(1)
         asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2]))
         return
     else:

@@ -1286,3 +1286,235 @@ class ClientAPI:
                 except:
                     pass
             await self.queue.close()
+
+    async def backup_database(self, backup_path: str) -> DbResult:
+        """
+        Backup the entire database to a file.
+        
+        Args:
+            backup_path (str): Path where the backup file will be saved
+            
+        Returns:
+            DbResult: Result of the backup operation
+        """
+        try:
+            # Ensure database connection is established
+            await self.db.ensure_connected()
+            
+            async with self.db.pool.acquire() as conn:
+                with open(backup_path, 'w') as f:
+                    # First get and write all sequences
+                    sequences = await conn.fetch("""
+                        SELECT sequence_name 
+                        FROM information_schema.sequences 
+                        WHERE sequence_schema = 'public'
+                        ORDER BY sequence_name
+                    """)
+                    
+                    f.write("-- Sequences\n")
+                    for seq in sequences:
+                        seq_name = seq['sequence_name']
+                        # Get sequence current value
+                        curr_val = await conn.fetchval(f"SELECT last_value FROM {seq_name}")
+                        f.write(f"DROP SEQUENCE IF EXISTS {seq_name} CASCADE;\n")
+                        f.write(f"CREATE SEQUENCE {seq_name};\n")
+                        if curr_val > 1:  # Only set if not default
+                            f.write(f"SELECT setval('{seq_name}', {curr_val}, true);\n")
+                    f.write("\n")
+                    
+                    # Get all tables
+                    tables = await conn.fetch("""
+                        SELECT tablename 
+                        FROM pg_tables 
+                        WHERE schemaname = 'public'
+                        ORDER BY tablename
+                    """)
+                    
+                    # Get column types for all tables
+                    table_column_types = {}
+                    for table in tables:
+                        table_name = table['tablename']
+                        column_types = await conn.fetch("""
+                            SELECT column_name, data_type, udt_name
+                            FROM information_schema.columns
+                            WHERE table_name = $1
+                        """, table_name)
+                        table_column_types[table_name] = {
+                            col['column_name']: col['udt_name']
+                            for col in column_types
+                        }
+                    
+                    # First get and write all table schemas
+                    for table in tables:
+                        table_name = table['tablename']
+                        
+                        # Get complete table schema including constraints
+                        schema = await conn.fetch(f"""
+                            SELECT 
+                                a.attname as column_name,
+                                pg_catalog.format_type(a.atttypid, a.atttypmod) as data_type,
+                                a.attnotnull as is_notnull,
+                                (SELECT pg_get_expr(adbin, adrelid)
+                                 FROM pg_attrdef
+                                 WHERE adrelid = a.attrelid
+                                 AND adnum = a.attnum) as column_default
+                            FROM pg_attribute a
+                            WHERE a.attrelid = '{table_name}'::regclass
+                            AND a.attnum > 0
+                            AND NOT a.attisdropped
+                            ORDER BY a.attnum;
+                        """)
+                        
+                        # Get primary key info
+                        pkey = await conn.fetch(f"""
+                            SELECT a.attname
+                            FROM pg_index i
+                            JOIN pg_attribute a ON a.attrelid = i.indrelid
+                            AND a.attnum = ANY(i.indkey)
+                            WHERE i.indrelid = '{table_name}'::regclass
+                            AND i.indisprimary;
+                        """)
+                        
+                        # Get foreign key constraints
+                        fkeys = await conn.fetch(f"""
+                            SELECT
+                                tc.constraint_name,
+                                kcu.column_name,
+                                ccu.table_name AS foreign_table_name,
+                                ccu.column_name AS foreign_column_name
+                            FROM information_schema.table_constraints AS tc
+                            JOIN information_schema.key_column_usage AS kcu
+                                ON tc.constraint_name = kcu.constraint_name
+                            JOIN information_schema.constraint_column_usage AS ccu
+                                ON ccu.constraint_name = tc.constraint_name
+                            WHERE tc.table_name = '{table_name}'
+                                AND tc.constraint_type = 'FOREIGN KEY';
+                        """)
+                        
+                        # Write table creation
+                        f.write(f"-- Table: {table_name}\n")
+                        f.write(f"DROP TABLE IF EXISTS {table_name} CASCADE;\n")
+                        f.write(f"CREATE TABLE {table_name} (\n")
+                        
+                        # Write columns
+                        columns = []
+                        for col in schema:
+                            col_def = []
+                            col_def.append(f"    {col['column_name']} {col['data_type']}")
+                            
+                            if col['is_notnull']:
+                                col_def.append('NOT NULL')
+                            if col['column_default']:
+                                col_def.append(f"DEFAULT {col['column_default']}")
+                            
+                            columns.append(" ".join(col_def))
+                        
+                        # Add primary key constraint if exists
+                        if pkey:
+                            pkey_cols = [pk['attname'] for pk in pkey]
+                            columns.append(f"    PRIMARY KEY ({', '.join(pkey_cols)})")
+                        
+                        f.write(",\n".join(columns))
+                        f.write("\n);\n\n")
+                        
+                        # Write foreign key constraints
+                        for fkey in fkeys:
+                            f.write(f"ALTER TABLE {table_name} ADD CONSTRAINT {fkey['constraint_name']} \n")
+                            f.write(f"    FOREIGN KEY ({fkey['column_name']}) \n")
+                            f.write(f"    REFERENCES {fkey['foreign_table_name']}({fkey['foreign_column_name']});\n")
+                        if fkeys:
+                            f.write("\n")
+                    
+                    # Then write all table data
+                    for table in tables:
+                        table_name = table['tablename']
+                        column_types = table_column_types[table_name]
+                        records = await conn.fetch(f"SELECT * FROM {table_name}")
+                        
+                        if records:
+                            f.write(f"-- Data for {table_name}\n")
+                            for record in records:
+                                columns = [k for k in record.keys()]
+                                values = []
+                                for col, v in zip(columns, record.values()):
+                                    if v is None:
+                                        values.append('NULL')
+                                    elif isinstance(v, (list, tuple)):
+                                        # Handle array types with proper casting
+                                        base_type = column_types[col].replace('_', '')  # Remove array indicator
+                                        if all(x is None for x in v):
+                                            # If all elements are NULL, use empty array with type cast
+                                            values.append(f"ARRAY[]::integer[]" if base_type in ('int2', 'int4', 'int8', 'integer') else f"ARRAY[]::varchar[]")
+                                        else:
+                                            array_values = []
+                                            for x in v:
+                                                if x is None:
+                                                    array_values.append('NULL')
+                                                elif base_type in ('int2', 'int4', 'int8', 'integer'):
+                                                    array_values.append(str(x))
+                                                else:
+                                                    array_values.append(f"'{str(x)}'")
+                                            # Use proper array type casting
+                                            array_type = "integer[]" if base_type in ('int2', 'int4', 'int8', 'integer') else "varchar[]"
+                                            values.append(f"ARRAY[{', '.join(array_values)}]::{array_type}")
+                                    elif isinstance(v, bool):
+                                        values.append(str(v))
+                                    else:
+                                        values.append(f"'{str(v).replace(chr(39), chr(39)+chr(39))}'")
+                                
+                                f.write(f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(values)});\n")
+                            f.write("\n")
+                
+                return DbResult(success=True)
+                
+        except Exception as e:
+            logger.error(f"Database backup failed: {str(e)}")
+            return DbResult(success=False, error=str(e))
+
+    async def restore_database(self, backup_path: str) -> DbResult:
+        """
+        Restore the database from a backup file.
+        
+        Args:
+            backup_path (str): Path to the backup file
+            
+        Returns:
+            DbResult: Result of the restore operation
+        """
+        try:
+            # Ensure database connection is established
+            await self.db.ensure_connected()
+            
+            async with self.db.pool.acquire() as conn:
+                # First disable foreign key constraints
+                await conn.execute('SET CONSTRAINTS ALL DEFERRED;')
+                
+                # Read and execute the backup file
+                with open(backup_path, 'r') as f:
+                    sql_commands = []
+                    current_command = []
+                    
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('--'):  # Skip comments and empty lines
+                            current_command.append(line)
+                            if line.endswith(';'):
+                                sql_commands.append('\n'.join(current_command))
+                                current_command = []
+                    
+                    # Execute each command in a transaction
+                    async with conn.transaction():
+                        for command in sql_commands:
+                            try:
+                                await conn.execute(command)
+                            except Exception as e:
+                                logger.error(f"Error executing command: {str(e)}\nCommand: {command}")
+                                return DbResult(success=False, error=f"Restore failed: {str(e)}")
+                
+                # Re-enable constraints
+                await conn.execute('SET CONSTRAINTS ALL IMMEDIATE;')
+                return DbResult(success=True)
+                
+        except Exception as e:
+            logger.error(f"Database restore failed: {str(e)}")
+            return DbResult(success=False, error=str(e))

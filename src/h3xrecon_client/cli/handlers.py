@@ -112,6 +112,15 @@ class CommandHandlers:
                 elif arg2 == 'show':
                     keys = await self.api.show_cache_keys_values()
                     [self.console.print(k) for k in keys]
+            elif arg1 == 'database':
+                if not arg2:
+                    self.console.print("[red]Error: Missing backup file path[/]")
+                    return
+                result = await self.api.backup_database(arg2)
+                if result.success:
+                    self.console.print(f"[green]Database backup created at {arg2}[/]")
+                else:
+                    self.console.print(f"[red]Error creating backup: {result.error}[/]")
             else:
                 self.console.print(f"[red]Error: Invalid system command: {arg1}[/]")
 
@@ -131,6 +140,24 @@ class CommandHandlers:
                                 self.console.print(f"[green]Status flushed successfully for {component}[/]")
                             else:
                                 self.console.print(f"[red]Error flushing status: {result.error}[/]")
+                return
+            elif arg1 == 'database' and arg2 in ['backup', 'restore']:
+                if not arg3:
+                    self.console.print("[red]Error: Missing backup file path[/]")
+                    return
+                    
+                if arg2 == 'backup':
+                    result = await self.api.backup_database(arg3)
+                    if result.success:
+                        self.console.print(f"[green]Database backup created at {arg3}[/]")
+                    else:
+                        self.console.print(f"[red]Error creating backup: {result.error}[/]")
+                else:  # restore
+                    result = await self.api.restore_database(arg3)
+                    if result.success:
+                        self.console.print(f"[green]Database restored from {arg3}[/]")
+                    else:
+                        self.console.print(f"[red]Error restoring database: {result.error}[/]")
                 return
             elif arg1 == 'queue':
                 # Determine which stream to use
