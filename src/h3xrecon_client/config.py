@@ -59,6 +59,10 @@ class LogConfig:
 
 class ClientConfig:
     def __init__(self):
+        if os.environ.get('H3XRECON_CLIENT_CONFIG'):
+            self.config_path = os.environ.get('H3XRECON_CLIENT_CONFIG')
+        else:
+            self.config_path = os.path.expanduser('~/.h3xrecon/config.json')
         config = self._load_client_config_file()
         self.database = DatabaseConfig(**config.get('database', {}))
         self.nats = NatsConfig(**config.get('nats', {}))
@@ -67,10 +71,8 @@ class ClientConfig:
     
     def _load_client_config_file(self):
         """Load configuration from a JSON file."""
-        config_path = os.path.expanduser('~/.h3xrecon/config.json')
-        
         try:
-            with open(config_path, 'r') as f:
+            with open(self.config_path, 'r') as f:
                 client_config_json = json.load(f)
 
             return client_config_json
