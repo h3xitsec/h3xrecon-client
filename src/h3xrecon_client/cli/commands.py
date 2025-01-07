@@ -127,7 +127,7 @@ def config_commands(
 
 @app.command("list")
 def list_commands(
-    type: str = typer.Argument(..., help="Type: domains, ips, urls, services, nuclei, certificates"),
+    type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates"),
     resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
     unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
     severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
@@ -149,7 +149,9 @@ def list_commands(
                     identifiers.append(item[0])  # domain
                 elif type == 'ips':
                     identifiers.append(item[0])  # ip
-                elif type == 'urls':
+                elif type == 'websites':
+                    identifiers.append(item[0])  # url
+                elif type == 'websites_paths':
                     identifiers.append(item[0])  # url
                 elif type == 'services':
                     identifiers.append(f"{item[0]}:{item[1]}")  # ip:port
@@ -157,6 +159,8 @@ def list_commands(
                     identifiers.append(f"{item[0]} ({item[2]})")  # target (severity)
                 elif type == 'certificates':
                     identifiers.append(item[0])  # domain
+                elif type == 'screenshots':
+                    identifiers.append(item[0])  # screenshot
             
             for identifier in identifiers:
                 typer.echo(identifier)
@@ -273,7 +277,7 @@ class CliPaginator:
 
 @app.command("show")
 def show_commands(
-    type: str = typer.Argument(..., help="Type: domains, ips, urls, services, nuclei, certificates"),
+    type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates, screenshots"),
     resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
     unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
     severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
@@ -327,10 +331,12 @@ def get_headers_for_type(type_name):
     headers_map = {
         'domains': ['Domain', 'CNAMEs', 'Catchall'],
         'ips': ['IP', 'PTR', 'Cloud Provider'],
-        'urls': ['URL', 'Title', 'Status Code', 'Content Type'],
+        'websites': ['URL','Host','Port','Scheme','Techs'],
+        'websites_paths': ['URL', 'Path', 'Final Path', 'Status Code', 'Content Type'],
         'services': ['Protocol', 'IP', 'Port', 'Service', 'PTR'],
         'nuclei': ['Target', 'Template', 'Severity', 'Matcher Name'],
-        'certificates': ['Subject CN', 'Issuer Org', 'Serial', 'Valid Date', 'Expiry Date', 'Subject Alternative Names']
+        'certificates': ['Subject CN', 'Issuer Org', 'Serial', 'Valid Date', 'Expiry Date', 'Subject Alternative Names'],
+        'screenshots': ['URL', 'Screenshot', 'MD5 Hash']
     }
     return headers_map.get(type_name, [])
 
@@ -358,7 +364,7 @@ def console_mode():
 
 @app.command("add")
 def add_commands(
-    type: str = typer.Argument(..., help="Type: domain, ip, url"),
+    type: str = typer.Argument(..., help="Type: domain, ip, website, website_path"),
     item: str = typer.Argument(..., help="Item to add"),
     program: Optional[str] = program_option,
     stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin")

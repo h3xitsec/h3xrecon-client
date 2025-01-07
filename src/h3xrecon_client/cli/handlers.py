@@ -59,16 +59,20 @@ class CommandHandlers:
         # List/Show commands
         table.add_row("list domains [--resolved] [--unresolved]", "List domains")
         table.add_row("list ips [--resolved] [--unresolved]", "List IPs")
-        table.add_row("list urls", "List URLs")
+        table.add_row("list websites", "List websites")
+        table.add_row("list websites_paths", "List websites paths")
         table.add_row("list services", "List services")
         table.add_row("list nuclei [--severity <sev>]", "List nuclei findings")
         table.add_row("list certificates", "List certificates")
+        table.add_row("list screenshots", "List screenshots")
         table.add_row("show domains [--resolved] [--unresolved]", "Show domains in table format")
         table.add_row("show ips [--resolved] [--unresolved]", "Show IPs in table format")
-        table.add_row("show urls", "Show URLs in table format")
+        table.add_row("show websites", "Show websites in table format")
+        table.add_row("show websites_paths", "Show websites paths in table format")
         table.add_row("show services", "Show services in table format")
         table.add_row("show nuclei [--severity <sev>]", "Show nuclei findings in table format")
         table.add_row("show certificates", "Show certificates in table format")
+        table.add_row("show screenshots", "Show screenshots in table format")
         
         # Job commands
         table.add_row("sendjob <function> <target> [params...] [--force]", "Send job to worker")
@@ -228,7 +232,6 @@ class CommandHandlers:
                     
             elif action == 'database' and type == 'drop':
                 result = await self.api.drop_program_data(program)
-                print(result)
                 if result.success:
                     self.console.print("[green]Database dropped successfully[/]")
                 else:
@@ -258,10 +261,12 @@ class CommandHandlers:
                     result = await self.api.get_ips(program)
                 return [(ip['ip'], ip.get('ptr', 'N/A'), ip.get('cloud_provider', 'unknown')) for ip in result.data]
                 
-            elif type_name == 'urls':
-                result = await self.api.get_urls(program)
-                return [(url['url'], url.get('title', 'N/A'), url.get('status_code', 'N/A'), url.get('content_type', 'N/A')) for url in result.data]
-                
+            elif type_name == 'websites':
+                result = await self.api.get_websites(program)
+                return [(website['url'], website.get('host', 'N/A'), website.get('port', 'N/A'), website.get('scheme', 'N/A'), website.get('techs', 'N/A')) for website in result.data]
+            elif type_name == 'websites_paths':
+                result = await self.api.get_websites_paths(program)
+                return [(website.get('url', 'N/A'), website.get('path', 'N/A'), website.get('final_path', 'N/A'), website.get('status_code', 'N/A'), website.get('content_type', 'N/A')) for website in result.data]
             elif type_name == 'services':
                 result = await self.api.get_services(program)
                 return [(
@@ -287,7 +292,13 @@ class CommandHandlers:
                     cert.get('issuer', 'unknown'),
                     cert.get('valid_until', 'unknown')
                 ) for cert in result.data]
-
+            elif type_name == 'screenshots':
+                result = await self.api.get_screenshots(program)
+                return [(
+                    screenshot.get('url', 'unknown'),
+                    screenshot.get('filepath', 'unknown'),
+                    screenshot.get('md5_hash', 'unknown')
+                ) for screenshot in result.data]
             if not result or not result.data:
                 self.console.print("[yellow]No results found[/]")
                 return []

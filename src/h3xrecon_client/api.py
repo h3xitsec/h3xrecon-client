@@ -241,33 +241,46 @@ class ClientAPI:
             program_name (str): The name of the program whose data will be deleted.
         """
         queries = []
-        program_id = await self.get_program_id(program_name)
-        query = """
-        DELETE FROM domains WHERE program_id = $1
-        """
-        queries.append(query)
-        query = """
-        DELETE FROM urls WHERE program_id = $1
-        """
-        queries.append(query)
-        query = """
-        DELETE FROM services WHERE program_id = $1
-        """
-        queries.append(query)
-        query = """
-        DELETE FROM ips WHERE program_id = $1
-        """
-        queries.append(query)
-        query = """
-        DELETE FROM nuclei WHERE program_id = $1
-        """
-        queries.append(query)
-        query = """
-        DELETE FROM certificates WHERE program_id = $1
-        """
-        queries.append(query)
-        for q in queries:
-            await self.db._write_records(q, program_id)
+        try:
+            program_id = await self.get_program_id(program_name)
+            query = """
+            DELETE FROM domains WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM websites WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM websites_paths WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM services WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM ips WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM nuclei WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM certificates WHERE program_id = $1
+            """
+            queries.append(query)
+            query = """
+            DELETE FROM screenshots WHERE program_id = $1
+            """
+            queries.append(query)
+            for q in queries:
+                await self.db._write_records(q, program_id)
+            return DbResult(success=True)
+        except Exception as e:
+            logger.error(f"Unexpected error in drop_program_data: {str(e)}")
+            return DbResult(success=False, error=str(e))
     
     async def add_program(self, name: str):
         """
@@ -466,7 +479,7 @@ class ClientAPI:
         return False
 
     
-    async def get_urls(self, program_name: str = None):
+    async def get_websites(self, program_name: str = None):
         """
         Retrieve URLs for a specific program or all programs.
         
@@ -480,16 +493,36 @@ class ClientAPI:
         if program_name:
             query = """
         SELECT 
-           u.url,
-           u.title,
-           u.status_code,
-           u.content_type
-        FROM urls u
-        JOIN programs p ON u.program_id = p.id
+           w.url,
+           w.host,
+           w.port,
+           w.scheme,
+           w.techs
+        FROM websites w
+        JOIN programs p ON w.program_id = p.id
         WHERE p.name = $1
         """
             result = await self.db._fetch_records(query, program_name)
             return result
+        
+    async def get_websites_paths(self, program_name: str = None):
+        """
+        Retrieve websites paths for a specific program or all programs.
+        """
+        query = """
+        SELECT 
+            w.url || wp.path as url,
+            wp.path,
+            wp.final_path,
+            wp.status_code,
+            wp.content_type
+        FROM websites_paths wp
+        JOIN websites w ON wp.website_id = w.id
+        JOIN programs p ON w.program_id = p.id
+        WHERE p.name = $1
+        """
+        result = await self.db._fetch_records(query, program_name)
+        return result
 
     async def get_resolved_domains(self, program_name: str = None):
         """
@@ -632,6 +665,33 @@ class ClientAPI:
         except Exception as e:
             logger.exception(e)
             return []
+    
+    async def get_screenshots(self, program_name: str = None):
+        """
+        Retrieve screenshots for a specific program or all programs.
+        
+        Args:
+            program_name (str, optional): The name of the program to retrieve screenshots for.
+                                          If None, retrieves screenshots from all programs.
+        
+        Returns:
+            A list of screenshots associated with the specified program or all programs.
+        """
+        query = """
+        SELECT 
+            u.url,
+            s.filepath,
+            s.md5_hash
+        FROM screenshots s
+        JOIN urls u ON s.url_id = u.id
+        JOIN programs p ON s.program_id = p.id
+        """
+        if program_name:
+            query += " WHERE p.name = $1"
+            result = await self.db._fetch_records(query, program_name)
+        else:
+            result = await self.db._fetch_records(query)
+        return result
 
     async def get_services(self, program_name: str = None):
         """
@@ -732,7 +792,7 @@ class ClientAPI:
         Add items (domains, IPs, or URLs) to a program through the queue.
         
         Args:
-            item_type (str): Type of item to add ('domain', 'ip', 'url')
+            item_type (str): Type of item to add ('domain', 'ip', 'website')
             program_name (str): The name of the program to add items to
             items (Union[str, List[str]]): Single item or list of items to add
         
@@ -752,7 +812,7 @@ class ClientAPI:
             # Format items based on type
             formatted_items = []
             for item in items:
-                if item_type == 'url':
+                if item_type == 'website':
                     formatted_items.append({'url': item})
                 else:
                     formatted_items.append(item)
