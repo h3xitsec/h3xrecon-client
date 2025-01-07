@@ -135,12 +135,14 @@ class H3xReconConsole(CommandHandlers):
                     '--resolved': None,
                     '--unresolved': None,
                 },
-                'urls': None,
+                'websites': None,
+                'websites_paths': None,
                 'services': None,
                 'nuclei': {
                     '--severity': None,
                 },
                 'certificates': None,
+                'screenshots': None,
             },
             'show': {
                 'domains': {
@@ -151,12 +153,14 @@ class H3xReconConsole(CommandHandlers):
                     '--resolved': None,
                     '--unresolved': None,
                 },
-                'urls': None,
+                'websites': None,
+                'websites_paths': None,
                 'services': None,
                 'nuclei': {
                     '--severity': None,
                 },
                 'certificates': None,
+                'screenshots': None,
             },
             'help': None,
             'exit': None,
@@ -366,7 +370,9 @@ class H3xReconConsole(CommandHandlers):
                     identifiers.append(item[0])  # domain
                 elif type_name == 'ips':
                     identifiers.append(item[0])  # ip
-                elif type_name == 'urls':
+                elif type_name == 'websites':
+                    identifiers.append(item[0])  # url
+                elif type_name == 'websites_paths':
                     identifiers.append(item[0])  # url
                 elif type_name == 'services':
                     identifiers.append(f"{item[0]}:{item[1]}")  # ip:port
@@ -374,6 +380,8 @@ class H3xReconConsole(CommandHandlers):
                     identifiers.append(f"{item[0]} ({item[2]})")  # target (severity)
                 elif type_name == 'certificates':
                     identifiers.append(item[0])  # domain
+                elif type_name == 'screenshots':
+                    identifiers.append(item[0])  # url
             
             # Display paginated list of identifiers
             await self.display_paginated_items(identifiers)
@@ -389,11 +397,13 @@ class H3xReconConsole(CommandHandlers):
         """Return headers based on asset type"""
         headers_map = {
             'domains': ['Domain', 'IP', 'CatchAll'],
-            'ips': ['IP', 'Hostname', 'Status'],
-            'urls': ['URL', 'Status', 'Title'],
+            'ips': ['IP', 'PTR', 'Cloud Provider'],
+            'websites': ['URL', 'Host', 'Port', 'Scheme', 'Techs'],
+            'websites_paths': ['URL', 'Path', 'Final Path', 'Status Code', 'Content Type'],
             'services': ['IP', 'Port', 'Service', 'Version'],
             'nuclei': ['URL', 'Template', 'Severity', 'Name'],
-            'certificates': ['Domain', 'Issuer', 'Valid Until']
+            'certificates': ['Domain', 'Issuer', 'Valid Until'],
+            'screenshots': ['URL', 'Screenshot', 'MD5 Hash']
         }
         return headers_map.get(type_name, None)
 
