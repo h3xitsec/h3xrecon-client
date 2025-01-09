@@ -349,7 +349,7 @@ def get_headers_for_type(type_name):
 @app.command("sendjob")
 def sendjob_command(
     function_name: str = typer.Argument(..., help="Function to execute"),
-    target: str = typer.Argument(..., help="Target for the function"),
+    target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
     force: bool = typer.Option(False, "--force", help="Force job execution"),
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
     program: Optional[str] = program_option,
@@ -360,7 +360,21 @@ def sendjob_command(
     if not program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
-    asyncio.run(handlers.handle_sendjob_command(function_name, target, program, force, params or [], wordlist))
+
+    # Handle stdin input when target is '-'
+    if target == '-':
+        targets = []
+        for line in sys.stdin:
+            line = line.strip()
+            if line:  # Skip empty lines
+                targets.append(line)
+        if not targets:
+            typer.echo("Error: No targets received from stdin")
+            raise typer.Exit(1)
+    else:
+        targets = [target]
+
+    asyncio.run(handlers.handle_sendjob_command(function_name, targets, program, force, params or [], wordlist))
 
 @app.command("console")
 def console_mode():

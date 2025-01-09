@@ -312,7 +312,7 @@ class CommandHandlers:
         # Use the same data fetching logic as list commands
         return await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
 
-    async def handle_sendjob_command(self, function_name: str, target: str, program: str, 
+    async def handle_sendjob_command(self, function_name: str, targets: List[str], program: str, 
                                    force: bool = False, params: List[str] = None, wordlist: str = None) -> None:
         """Handle sendjob command"""
         try:
@@ -326,22 +326,31 @@ class CommandHandlers:
                 self.console.print(f"[red]Error: Program '{program}' not found[/]")
                 return
 
-            result = await self.api.send_job(
-                function_name=function_name,
-                program_name=program,
-                params={
-                    "target": target,
-                    "extra_params": params or [],
-                    "wordlist": wordlist
-                },
-                force=force
-            )
-            
-            if result and result.success:
-                self.console.print("[green]Job sent successfully[/]")
+            total_targets = len(targets)
+            successful_jobs = 0
+
+            for target in targets:
+                result = await self.api.send_job(
+                    function_name=function_name,
+                    program_name=program,
+                    params={
+                        "target": target,
+                        "extra_params": params or [],
+                        "wordlist": wordlist
+                    },
+                    force=force
+                )
+                
+                if result and result.success:
+                    successful_jobs += 1
+                else:
+                    error_msg = result.error if result else "Unknown error"
+                    self.console.print(f"[red]Error sending job for target {target}: {error_msg}[/]")
+
+            if successful_jobs == total_targets:
+                self.console.print(f"[green]All {total_targets} jobs sent successfully[/]")
             else:
-                error_msg = result.error if result else "Unknown error"
-                self.console.print(f"[red]Error sending job: {error_msg}[/]")
+                self.console.print(f"[yellow]{successful_jobs} out of {total_targets} jobs sent successfully[/]")
                 
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
