@@ -679,11 +679,11 @@ class ClientAPI:
         """
         query = """
         SELECT 
-            u.url,
+            w.url,
             s.filepath,
             s.md5_hash
         FROM screenshots s
-        JOIN urls u ON s.url_id = u.id
+        JOIN websites w ON s.website_id = w.id
         JOIN programs p ON s.program_id = p.id
         """
         if program_name:

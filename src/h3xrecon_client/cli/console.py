@@ -396,7 +396,7 @@ class H3xReconConsole(CommandHandlers):
     def get_headers_for_type(self, type_name):
         """Return headers based on asset type"""
         headers_map = {
-            'domains': ['Domain', 'IP', 'CatchAll'],
+            'domains': ['Domain', 'CNAMEs', 'CatchAll'],
             'ips': ['IP', 'PTR', 'Cloud Provider'],
             'websites': ['URL', 'Host', 'Port', 'Scheme', 'Techs'],
             'websites_paths': ['URL', 'Path', 'Final Path', 'Status Code', 'Content Type'],

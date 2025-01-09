@@ -313,7 +313,7 @@ class CommandHandlers:
         return await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
 
     async def handle_sendjob_command(self, function_name: str, target: str, program: str, 
-                                   force: bool = False, params: List[str] = None) -> None:
+                                   force: bool = False, params: List[str] = None, wordlist: str = None) -> None:
         """Handle sendjob command"""
         try:
             # First check if program exists
@@ -331,7 +331,8 @@ class CommandHandlers:
                 program_name=program,
                 params={
                     "target": target,
-                    "extra_params": params or []
+                    "extra_params": params or [],
+                    "wordlist": wordlist
                 },
                 force=force
             )

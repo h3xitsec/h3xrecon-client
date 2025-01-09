@@ -24,10 +24,14 @@ program_option = typer.Option(None, "--program", "-p", help="Program to work on"
 # Add no_pager to the global options at the top
 no_pager_option = typer.Option(False, "--no-pager", help="Disable pagination and show all results at once")
 
+## Add wordlist option to the global options at the top
+wordlist_option = typer.Option(None, "--wordlist", help="Wordlist to use for web_fuzz")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
-    no_pager: bool = no_pager_option
+    no_pager: bool = no_pager_option,
+    wordlist: Optional[str] = wordlist_option
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -35,6 +39,8 @@ def main(
     if program:
         handlers.current_program = program
     handlers.no_pager = no_pager
+    if wordlist:
+        handlers.wordlist = wordlist
 
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
@@ -346,14 +352,15 @@ def sendjob_command(
     target: str = typer.Argument(..., help="Target for the function"),
     force: bool = typer.Option(False, "--force", help="Force job execution"),
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
-    program: Optional[str] = program_option
+    program: Optional[str] = program_option,
+    wordlist: Optional[str] = wordlist_option
 ):
     """Send job to worker"""
     program = get_program(program)
     if not program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
-    asyncio.run(handlers.handle_sendjob_command(function_name, target, program, force, params or []))
+    asyncio.run(handlers.handle_sendjob_command(function_name, target, program, force, params or [], wordlist))
 
 @app.command("console")
 def console_mode():
