@@ -27,11 +27,17 @@ no_pager_option = typer.Option(False, "--no-pager", help="Disable pagination and
 ## Add wordlist option to the global options at the top
 wordlist_option = typer.Option(None, "--wordlist", help="Wordlist to use for web_fuzz")
 
+# Add options for scope management
+wildcard_option = typer.Option(False, "--wildcard", help="Use wildcard for domain scope")
+regex_option = typer.Option(None, "--regex", help="Use regex for domain scope")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
     no_pager: bool = no_pager_option,
-    wordlist: Optional[str] = wordlist_option
+    wordlist: Optional[str] = wordlist_option,
+    wildcard: bool = wildcard_option,
+    regex: Optional[str] = regex_option
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -41,6 +47,10 @@ def main(
     handlers.no_pager = no_pager
     if wordlist:
         handlers.wordlist = wordlist
+    if wildcard:
+        handlers.wildcard_scope = wildcard
+    if regex:
+        handlers.regex_scope = regex
 
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
@@ -122,14 +132,16 @@ def config_commands(
     action: str = typer.Argument(..., help="Action: add, del, list"),
     type: str = typer.Argument(..., help="Type: cidr, scope"),
     value: Optional[str] = typer.Argument(None, help="Value for add/del actions"),
-    program: Optional[str] = program_option
+    program: Optional[str] = program_option,
+    wildcard: bool = wildcard_option,
+    regex: Optional[str] = regex_option
 ):
     """Configuration commands"""
     program = get_program(program)
     if not program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
-    asyncio.run(handlers.handle_config_commands(action, type, program, value))
+    asyncio.run(handlers.handle_config_commands(action, type, program, value, wildcard, regex))
 
 @app.command("list")
 def list_commands(
