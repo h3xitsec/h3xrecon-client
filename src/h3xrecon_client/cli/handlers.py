@@ -384,21 +384,21 @@ class CommandHandlers:
                     
                     # Add scope
                     for scope in program.get('scope', []):
-                        result = await self.api.add_program_scope(name, scope)
-                        if result.success:
+                        result = await self.api.add_program_scope(name, **scope)
+                        if result['inserted']:
                             self.console.print(f"[green]Scope '{scope}' added successfully[/]")
                         else:
-                            self.console.print(f"[red]Error adding scope '{scope}': {result.error}[/]")
+                            self.console.print(f"[yellow]Scope '{scope}' already exists[/]")
                     
                     # Add CIDR
                     for cidr in program.get('cidr', []):
                         result = await self.api.add_program_cidr(name, cidr)
-                        if result.success:
+                        if result['inserted']:
                             self.console.print(f"[green]CIDR '{cidr}' added successfully[/]")
                         else:
-                            self.console.print(f"[red]Error adding CIDR '{cidr}': {result.error}[/]")
+                            self.console.print(f"[yellow]CIDR '{cidr}' already exists[/]")
                             
-                    self.console.print("")
+                    self.console.print("[green]Program imported successfully[/]")
                     
         except Exception as e:
             self.console.print(f"[red]Error importing programs: {str(e)}[/]")

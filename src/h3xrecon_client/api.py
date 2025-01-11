@@ -303,7 +303,7 @@ class ClientAPI:
         query = "DELETE FROM programs WHERE name = $1"
         return await self.db._write_records(query, program_name)
 
-    async def add_program_scope(self, program_name: str, scope: str, wildcard: bool = False, regex: Optional[str] = None):
+    async def add_program_scope(self, program_name: str, domain: str, wildcard: bool = False, regex: Optional[str] = None):
         """
         Add a scope regex pattern to a specific program.
         
@@ -323,7 +323,7 @@ class ClientAPI:
         if wildcard:
             if regex:
                 print(f"Warning: Wildcard and regex cannot be used together, regex will be ignored")
-            _regex = f"^.*{scope.replace('.', '\\.')}$"
+            _regex = f"^.*{domain.replace('.', '\\.')}$"
             _wildcard = True
         elif regex:
             _regex = regex
@@ -334,14 +334,14 @@ class ClientAPI:
             _wildcard = True
         
         else:
-            _regex = f"^{scope}$"
+            _regex = f"^{domain}$"
             _wildcard = False
         query = """
         INSERT INTO program_scopes_domains (program_id, domain, wildcard, regex) VALUES ($1, $2, $3, $4)
         ON CONFLICT (program_id, domain, regex) DO NOTHING
         RETURNING (xmax = 0) AS inserted, id
         """
-        result = await self.db._write_records(query, program_id, scope, _wildcard, _regex)
+        result = await self.db._write_records(query, program_id, domain, _wildcard, _regex)
         if result.success and isinstance(result.data, list) and len(result.data) > 0:
             return {
                 'inserted': result.data[0]['inserted'],
