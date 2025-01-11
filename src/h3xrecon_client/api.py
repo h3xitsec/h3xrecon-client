@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any, Union, Optional
 from .config import ClientConfig
 from .database import Database, DatabaseConnectionError, DbResult
 from .cache import Cache, CacheResult
@@ -303,7 +303,7 @@ class ClientAPI:
         query = "DELETE FROM programs WHERE name = $1"
         return await self.db._write_records(query, program_name)
 
-    async def add_program_scope(self, program_name: str, scope: str):
+    async def add_program_scope(self, program_name: str, scope: str, wildcard: bool = False, regex: Optional[str] = None):
         """
         Add a scope regex pattern to a specific program.
         
@@ -320,11 +320,34 @@ class ClientAPI:
         program_id = await self.get_program_id(program_name)
         if program_id is None:
             raise ValueError(f"Program '{program_name}' not found")
+        if wildcard:
+            if regex:
+                print(f"Warning: Wildcard and regex cannot be used together, regex will be ignored")
+            _regex = f"^.*{scope.replace('.', '\\.')}$"
+            _wildcard = True
+        elif regex:
+            _regex = regex
+            if not _regex.startswith('^'):
+                _regex = f"^{_regex}"
+            if not _regex.endswith('$'):
+                _regex = f"{_regex}$"
+            _wildcard = True
         
+        else:
+            _regex = f"^{scope}$"
+            _wildcard = False
         query = """
-        INSERT INTO program_scopes (program_id, regex) VALUES ($1, $2)
+        INSERT INTO program_scopes_domains (program_id, domain, wildcard, regex) VALUES ($1, $2, $3, $4)
+        ON CONFLICT (program_id, domain, regex) DO NOTHING
+        RETURNING (xmax = 0) AS inserted, id
         """
-        return await self.db._write_records(query, program_id, scope)
+        result = await self.db._write_records(query, program_id, scope, _wildcard, _regex)
+        if result.success and isinstance(result.data, list) and len(result.data) > 0:
+            return {
+                'inserted': result.data[0]['inserted'],
+                'id': result.data[0]['id']
+            }
+        return {'inserted': False, 'id': None}
 
     async def add_program_cidr(self, program_name: str, cidr: str):
         """
@@ -360,7 +383,7 @@ class ClientAPI:
             A list of regex patterns defining the program's scope.
         """
         query = """
-        SELECT regex FROM program_scopes WHERE program_id = (SELECT id FROM programs WHERE name = $1)
+        SELECT domain,wildcard,regex FROM program_scopes_domains WHERE program_id = (SELECT id FROM programs WHERE name = $1)
         """
         result = await self.db._fetch_records(query, program_name)
         return result
@@ -393,16 +416,12 @@ class ClientAPI:
             bool: True if the scope was successfully removed, False otherwise.
         """
         query = """
-        DELETE FROM program_scopes 
+        DELETE FROM program_scopes_domains
         WHERE program_id = (SELECT id FROM programs WHERE name = $1)
-        AND regex = $2
+        AND domain = $2
         RETURNING id
         """
-        result = await self.db._write_records(query, program_name, scope)
-        if result:
-            print(f"Scope removed from program {program_name}: {scope}")
-            return True
-        return False
+        return await self.db._write_records(query, program_name, scope)
 
     async def remove_program_cidr(self, program_name: str, cidr: str):
         """

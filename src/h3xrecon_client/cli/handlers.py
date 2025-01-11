@@ -197,7 +197,7 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
-    async def handle_config_commands(self, action: str, type: str, program: str, value: Optional[str] = None) -> None:
+    async def handle_config_commands(self, action: str, type: str, program: str, value: Optional[str] = None, wildcard: bool = False, regex: Optional[str] = None) -> None:
         """Handle configuration commands"""
         try:
             if action == 'list':
@@ -206,18 +206,27 @@ class CommandHandlers:
                     [self.console.print(r.get('cidr')) for r in result.data]
                 elif type == 'scope':
                     result = await self.api.get_program_scope(program)
-                    [self.console.print(r.get('regex')) for r in result.data]
-                    
+                    if wildcard:
+                        [self.console.print(r.get('domain')) for r in result.data if r.get('wildcard')]
+                    else:
+                        [self.console.print(r.get('regex')) for r in result.data]
+
+            elif action == 'show' and type == 'scope':
+                result = await self.api.get_program_scope(program)
+                if wildcard:
+                    [self.display_table_results([r for r in result.data if r.get('wildcard')])]
+                else:
+                    [self.display_table_results(result.data)]
+            
             elif action == 'add' and value:
                 if type == 'cidr':
                     result = await self.api.add_program_cidr(program, value)
                 elif type == 'scope':
-                    result = await self.api.add_program_scope(program, value)
-                    
-                if result.success:
-                    self.console.print(f"[green]{type.upper()} '{value}' added successfully[/]")
+                    result = await self.api.add_program_scope(program, value, wildcard, regex)
+                if result['inserted']:
+                    self.console.print(f"[green] Scope '{value}' added successfully[/]")
                 else:
-                    self.console.print(f"[red]Error adding {type}: {result.error}[/]")
+                    self.console.print(f"[yellow] Scope '{value}' already exists[/]")
                     
             elif action == 'del' and value:
                 if type == 'cidr':
