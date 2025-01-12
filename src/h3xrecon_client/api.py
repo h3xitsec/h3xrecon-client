@@ -370,7 +370,13 @@ class ClientAPI:
         query = """
         INSERT INTO program_cidrs (program_id, cidr) VALUES ($1, $2)
         """
-        return await self.db._write_records(query, program_id, cidr)
+        result = await self.db._write_records(query, program_id, cidr)
+        if result.success and isinstance(result.data, list) and len(result.data) > 0:
+            return {
+                'inserted': result.data[0]['inserted'],
+                'id': result.data[0]['id']
+            }
+        return {'inserted': False, 'id': None}
 
     async def get_program_scope(self, program_name: str) -> List[str]:
         """
