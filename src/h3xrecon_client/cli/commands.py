@@ -347,7 +347,7 @@ def show_commands(
 def get_headers_for_type(type_name):
     """Return headers based on asset type"""
     headers_map = {
-        'domains': ['Domain', 'CNAMEs', 'Catchall'],
+        'domains': ['Domain', 'IPs', 'CNAMEs', 'Catchall'],
         'ips': ['IP', 'PTR', 'Cloud Provider'],
         'websites': ['URL','Host','Port','Scheme','Techs'],
         'websites_paths': ['URL', 'Path', 'Final Path', 'Status Code', 'Content Type'],

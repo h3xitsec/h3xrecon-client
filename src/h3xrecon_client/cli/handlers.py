@@ -259,7 +259,7 @@ class CommandHandlers:
                     result = await self.api.get_unresolved_domains(program)
                 else:
                     result = await self.api.get_domains(program)
-                return [(d['domain'], d.get('cnames', 'N/A'), d.get('is_catchall', 'unknown')) for d in result.data]
+                return [(d['domain'], d.get('resolved_ips', 'N/A'), d.get('cnames', 'N/A'), d.get('is_catchall', 'unknown')) for d in result.data]
                 
             elif type_name == 'ips':
                 if resolved:

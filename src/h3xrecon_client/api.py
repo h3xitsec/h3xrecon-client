@@ -671,7 +671,7 @@ class ClientAPI:
         query = """
         SELECT 
             d.domain,
-            (SELECT ip FROM ips WHERE id = ANY(d.ips) LIMIT 1) as resolved_ip,
+            (SELECT ip FROM ips WHERE id = ANY(d.ips)) as resolved_ips,
             d.cnames,
             d.is_catchall,
             p.name as program
