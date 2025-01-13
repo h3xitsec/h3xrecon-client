@@ -1014,7 +1014,7 @@ class ClientAPI:
                     pass
             await self.queue.close()
     
-    async def send_job(self, function_name: str, program_name: str, params: dict, force: bool):
+    async def send_job(self, function_name: str, program_name: str, params: dict, force: bool, trigger_new_jobs: bool = True):
         """
         Send a job to the worker using QueueManager.
         
@@ -1036,7 +1036,8 @@ class ClientAPI:
                 "force": force,
                 "function_name": function_name,
                 "program_id": program_id,
-                "params": params
+                "params": params,
+                "trigger_new_jobs": trigger_new_jobs
             }
 
             await self.queue.connect()

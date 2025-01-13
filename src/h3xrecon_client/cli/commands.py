@@ -31,13 +31,16 @@ wordlist_option = typer.Option(None, "--wordlist", help="Wordlist to use for web
 wildcard_option = typer.Option(False, "--wildcard", help="Use wildcard for domain scope")
 regex_option = typer.Option(None, "--regex", help="Use regex for domain scope")
 
+# Add trigger_new_jobs option to the global options at the top
+no_trigger_option = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
 @app.callback()
 def main(
     program: Optional[str] = program_option,
     no_pager: bool = no_pager_option,
     wordlist: Optional[str] = wordlist_option,
     wildcard: bool = wildcard_option,
-    regex: Optional[str] = regex_option
+    regex: Optional[str] = regex_option,
+    no_trigger: bool = no_trigger_option
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -51,7 +54,7 @@ def main(
         handlers.wildcard_scope = wildcard
     if regex:
         handlers.regex_scope = regex
-
+    handlers.no_trigger = no_trigger
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
     return cmd_program or handlers.current_program
@@ -363,6 +366,7 @@ def sendjob_command(
     function_name: str = typer.Argument(..., help="Function to execute"),
     target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
     force: bool = typer.Option(False, "--force", help="Force job execution"),
+    no_trigger: bool = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
     program: Optional[str] = program_option,
     wordlist: Optional[str] = wordlist_option
@@ -386,7 +390,7 @@ def sendjob_command(
     else:
         targets = [target]
 
-    asyncio.run(handlers.handle_sendjob_command(function_name, targets, program, force, params or [], wordlist))
+    asyncio.run(handlers.handle_sendjob_command(function_name, targets, program, force, params or [], wordlist, no_trigger))
 
 @app.command("console")
 def console_mode():
