@@ -660,22 +660,16 @@ class ClientAPI:
     async def get_domains(self, program_name: str = None):
         """
         Retrieve domains for a specific program or all programs.
-        
-        Args:
-            program_name (str, optional): The name of the program to retrieve domains for.
-                                          If None, retrieves domains from all programs.
-        
-        Returns:
-            A list of domains associated with the specified program or all programs.
         """
         query = """
         SELECT 
             d.domain,
-            (SELECT ip FROM ips WHERE id = ANY(d.ips)) as resolved_ips,
+            array_agg(i.ip) as resolved_ips,
             d.cnames,
             d.is_catchall,
             p.name as program
         FROM domains d
+        LEFT JOIN ips i ON i.id = ANY(d.ips)
         JOIN programs p ON d.program_id = p.id
         """
         try:
@@ -683,8 +677,10 @@ class ClientAPI:
                 query += """
                 WHERE p.name = $1
                 """
+                query += " GROUP BY d.domain, d.cnames, d.is_catchall, p.name"
                 result = await self.db._fetch_records(query, program_name)
             else:
+                query += " GROUP BY d.domain, d.cnames, d.is_catchall, p.name"
                 result = await self.db._fetch_records(query)
             return result
         except Exception as e:
@@ -721,13 +717,6 @@ class ClientAPI:
     async def get_services(self, program_name: str = None):
         """
         Retrieve services for a specific program or all programs.
-        
-        Args:
-            program_name (str, optional): The name of the program to retrieve services for.
-                                          If None, retrieves services from all programs.
-        
-        Returns:
-            A list of services associated with the specified program or all programs.
         """
         query = """
         SELECT 
@@ -738,7 +727,7 @@ class ClientAPI:
             i.ptr,
             p.name as program_name
         FROM services s
-        JOIN ips i ON s.ip = i.id
+        LEFT JOIN ips i ON i.id = s.ip
         JOIN programs p ON s.program_id = p.id
         """
         try:
@@ -746,8 +735,10 @@ class ClientAPI:
                 query += """
                 WHERE p.name = $1
                 """
+                query += " GROUP BY s.protocol, i.ip, s.port, s.service, i.ptr, p.name"
                 result = await self.db._fetch_records(query, program_name)
             else:
+                query += " GROUP BY s.protocol, i.ip, s.port, s.service, i.ptr, p.name"
                 result = await self.db._fetch_records(query)
             return result
         except Exception as e:

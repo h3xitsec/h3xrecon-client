@@ -354,7 +354,7 @@ def get_headers_for_type(type_name):
         'ips': ['IP', 'PTR', 'Cloud Provider'],
         'websites': ['URL','Host','Port','Scheme','Techs'],
         'websites_paths': ['URL', 'Path', 'Final Path', 'Status Code', 'Content Type'],
-        'services': ['Protocol', 'IP', 'Port', 'Service', 'PTR'],
+        'services': ['IP', 'Port', 'Service', 'Protocol', 'Resolved Hostname'],
         'nuclei': ['Target', 'Template', 'Severity', 'Matcher Name'],
         'certificates': ['Subject CN', 'Issuer Org', 'Serial', 'Valid Date', 'Expiry Date', 'Subject Alternative Names'],
         'screenshots': ['URL', 'Screenshot', 'MD5 Hash']

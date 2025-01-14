@@ -264,7 +264,8 @@ class CommandHandlers:
                     result = await self.api.get_unresolved_domains(program)
                 else:
                     result = await self.api.get_domains(program)
-                return [(d['domain'], d.get('resolved_ips', 'N/A'), d.get('cnames', 'N/A'), d.get('is_catchall', 'unknown')) for d in result.data]
+                if result.success:
+                    return [(d['domain'], d.get('resolved_ips', 'N/A'), d.get('cnames', 'N/A'), d.get('is_catchall', 'unknown')) for d in result.data]
                 
             elif type_name == 'ips':
                 if resolved:
@@ -287,7 +288,8 @@ class CommandHandlers:
                     service['ip'],
                     service.get('port', 'N/A'),
                     service.get('service', 'unknown'),
-                    service.get('version', 'N/A')
+                    service.get('protocol', 'N/A'),
+                    service.get('ptr', 'unknown')
                 ) for service in result.data]
                 
             elif type_name == 'nuclei':
@@ -313,9 +315,7 @@ class CommandHandlers:
                     screenshot.get('filepath', 'unknown'),
                     screenshot.get('md5_hash', 'unknown')
                 ) for screenshot in result.data]
-            if not result or not result.data:
-                self.console.print("[yellow]No results found[/]")
-                return []
+
                 
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
