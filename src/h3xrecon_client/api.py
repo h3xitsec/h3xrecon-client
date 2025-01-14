@@ -846,7 +846,9 @@ class ClientAPI:
             message = {
                 "program_id": program_id,
                 "data_type": item_type,
-                "data": formatted_items
+                "data": formatted_items,
+                "trigger_new_jobs": True,
+                "execution_id": None
             }
 
             # Send through queue
