@@ -165,32 +165,37 @@ class CommandHandlers:
                 return
             elif arg1 == 'queue':
                 # Determine which stream to use
-                stream = None
+                streams = []
                 if arg3 == 'recon':
-                    stream = 'RECON_INPUT'
+                    streams.append('RECON_INPUT')
                 elif arg3 == 'parsing':
-                    stream = 'PARSING_INPUT'
+                    streams.append('PARSING_INPUT')
                 elif arg3 == 'data':
-                    stream = 'DATA_INPUT'
+                    streams.append('DATA_INPUT')
+                elif arg3 == 'all':
+                    streams.append('RECON_INPUT')
+                    streams.append('PARSING_INPUT')
+                    streams.append('DATA_INPUT')
                 else:
                     self.console.print(f"[red]Error: Invalid stream type: {arg3}[/]")
                     return
 
-                if arg2 == 'show':
-                    info = await self.client_queue.get_stream_info(stream)
-                    self.console.print(info)
-                elif arg2 == 'messages':
-                    try:
-                        messages = await self.client_queue.get_stream_messages(stream)
-                        for msg in messages:
-                            self.console.print(msg)
-                    except StreamLockedException:
-                        self.console.print("[red]Error: Stream is locked[/]")
-                elif arg2 == 'flush':
-                    await self.client_queue.purge_stream(stream)
-                    self.console.print(f"[green]Stream {stream} flushed[/]")
-                else:
-                    self.console.print(f"[red]Error: Invalid queue command: {arg2}[/]")
+                for stream in streams:
+                    if arg2 == 'show':
+                        info = await self.client_queue.get_stream_info(stream)
+                        self.console.print(info)
+                    elif arg2 == 'messages':
+                        try:
+                            messages = await self.client_queue.get_stream_messages(stream)
+                            for msg in messages:
+                                self.console.print(msg)
+                        except StreamLockedException:
+                            self.console.print("[red]Error: Stream is locked[/]")
+                    elif arg2 == 'flush':
+                        await self.client_queue.purge_stream(stream)
+                        self.console.print(f"[green]Stream {stream} flushed[/]")
+                    else:
+                        self.console.print(f"[red]Error: Invalid queue command: {arg2}[/]")
             else:
                 self.console.print(f"[red]Error: Invalid system command: {arg1}[/]")
 
@@ -322,7 +327,7 @@ class CommandHandlers:
         return await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
 
     async def handle_sendjob_command(self, function_name: str, targets: List[str], program: str, 
-                                   force: bool = False, params: List[str] = None, wordlist: str = None) -> None:
+                                   force: bool = False, params: List[str] = None, wordlist: str = None, no_trigger: bool = False) -> None:
         """Handle sendjob command"""
         try:
             # First check if program exists
@@ -342,6 +347,7 @@ class CommandHandlers:
                 result = await self.api.send_job(
                     function_name=function_name,
                     program_name=program,
+                    trigger_new_jobs=not no_trigger,
                     params={
                         "target": target,
                         "extra_params": params or [],
