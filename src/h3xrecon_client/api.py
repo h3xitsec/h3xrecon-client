@@ -1051,17 +1051,44 @@ class ClientAPI:
 
     
     async def get_certificates(self, program_name: str = None):
-        """
-        Retrieve certificates for a specific program or all programs.
-        """
+        """Get certificates for a program."""
+        program_id = await self.get_program_id(program_name)
         query = """
-        SELECT subject_cn, issuer_org, serial, valid_date, expiry_date, array_length(subject_an, 1) as subject_an_count 
+        SELECT c.subject_cn, c.subject_an, c.valid_date, c.expiry_date, c.issuer_cn, c.issuer_org
         FROM certificates c
-        JOIN programs p ON c.program_id = p.id
+        WHERE c.program_id = $1
         """
-        if program_name:
-            query += " WHERE p.name = $1"
-        return await self.db._fetch_records(query, program_name)
+        return await self.db._fetch_records(query, program_id)
+
+    async def get_dns_records(self, program_name: str, domain: str = None):
+        """Get DNS records for a program and optionally filter by domain.
+        
+        Args:
+            program_name (str): Name of the program
+            domain (str, optional): Domain to filter records by
+        
+        Returns:
+            DbResult: Result containing DNS records
+        """
+        program_id = await self.get_program_id(program_name)
+        if domain:
+            query = """
+            SELECT dr.hostname, dr.ttl, dr.dns_class, dr.dns_type, dr.value, d.domain
+            FROM dns_records dr
+            JOIN domains d ON dr.domain_id = d.id
+            WHERE dr.program_id = $1 AND d.domain = $2
+            ORDER BY dr.hostname, dr.dns_type
+            """
+            return await self.db._fetch_records(query, program_id, domain)
+        else:
+            query = """
+            SELECT dr.hostname, dr.ttl, dr.dns_class, dr.dns_type, dr.value, d.domain
+            FROM dns_records dr
+            JOIN domains d ON dr.domain_id = d.id
+            WHERE dr.program_id = $1
+            ORDER BY dr.hostname, dr.dns_type
+            """
+            return await self.db._fetch_records(query, program_id)
 
     async def _wait_for_responses(self, response_sub, timeout: int = 5) -> List[Dict[str, Any]]:
         """
