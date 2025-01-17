@@ -322,9 +322,106 @@ class CommandHandlers:
             return []
 
     async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
-        """Handle show commands"""
-        # Use the same data fetching logic as list commands
-        return await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
+        """Handle show commands."""
+        items = await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
+        if items:
+            self.display_table_results(items)
+
+    async def handle_dns_command(self, program: str, domain: str = None):
+        """Handle DNS record display command.
+        
+        Args:
+            program (str): Program name
+            domain (str, optional): Domain to filter records by
+        
+        Returns:
+            List[Dict]: List of DNS records
+        """
+        try:
+            result = await self.api.get_dns_records(program, domain)
+            if result.success:
+                # Group records by domain
+                records_by_domain = {}
+                for record in result.data:
+                    domain = record['domain']
+                    if domain not in records_by_domain:
+                        records_by_domain[domain] = []
+                    records_by_domain[domain].append(record)
+
+                # Print records grouped by domain
+                for domain, records in records_by_domain.items():
+                    # Print domain header
+                    self.console.print(f"\n[bold blue]# Zone: {domain}[/bold blue]")
+                    self.console.print("[dim]# Records: {0}[/dim]".format(len(records)))
+                    self.console.print("[dim]" + "─" * 80 + "[/dim]")
+
+                    # Sort records by type and hostname
+                    records.sort(key=lambda x: (x['dns_type'], x['hostname']))
+
+                    # Find the maximum lengths for proper spacing
+                    max_hostname = max(len(r['hostname']) for r in records)
+                    max_ttl = max(len(str(r['ttl'])) for r in records)
+                    max_type = max(len(r['dns_type']) for r in records)
+                    max_class = max(len(r['dns_class']) for r in records)
+
+                    # Print column headers
+                    self.console.print(
+                        f"[dim]{'NAME'.ljust(max_hostname)} "
+                        f"{'TTL'.rjust(max_ttl)} "
+                        f"{'CLASS'.ljust(max_class)} "
+                        f"{'TYPE'.ljust(max_type)} "
+                        f"VALUE[/dim]"
+                    )
+                    self.console.print("[dim]" + "─" * 80 + "[/dim]")
+
+                    # Print each record with proper spacing and colors
+                    for record in records:
+                        hostname = record['hostname'].ljust(max_hostname)
+                        ttl = str(record['ttl']).rjust(max_ttl)
+                        dns_class = record['dns_class'].ljust(max_class)
+                        dns_type = record['dns_type'].ljust(max_type)
+                        value = record['value']
+
+                        # Color-code different record types
+                        type_color = {
+                            'A': 'green',
+                            'AAAA': 'green',
+                            'CNAME': 'yellow',
+                            'MX': 'blue',
+                            'TXT': 'magenta',
+                            'NS': 'cyan',
+                            'SOA': 'red',
+                            'SRV': 'blue',
+                            'PTR': 'yellow'
+                        }.get(record['dns_type'], 'white')
+
+                        # Format value based on record type
+                        if record['dns_type'] == 'MX':
+                            # Split priority and target for MX records
+                            try:
+                                priority, mx_target = value.split(' ', 1)
+                                value = f"[dim]{priority}[/dim] {mx_target}"
+                            except ValueError:
+                                pass
+                        elif record['dns_type'] == 'TXT':
+                            value = f'"{value}"'  # Quote TXT record values
+
+                        self.console.print(
+                            f"{hostname} "
+                            f"[dim]{ttl}[/dim] "
+                            f"{dns_class} "
+                            f"[{type_color}]{dns_type}[/{type_color}] "
+                            f"{value}"
+                        )
+
+                    self.console.print()  # Add empty line between domains
+                return result.data
+            else:
+                self.console.print(f"[red]Error getting DNS records: {result.error}[/]")
+                return None
+        except Exception as e:
+            self.console.print(f"[red]Error: {str(e)}[/]")
+            return None
 
     async def handle_sendjob_command(self, function_name: str, targets: List[str], program: str, 
                                    force: bool = False, params: List[str] = None, wordlist: str = None, no_trigger: bool = False, timeout: int = 300) -> None:

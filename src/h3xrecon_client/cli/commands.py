@@ -305,10 +305,11 @@ class CliPaginator:
 
 @app.command("show")
 def show_commands(
-    type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates, screenshots"),
+    type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates, screenshots, dns"),
     resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
     unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
     severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
+    domain: str = typer.Option(None, "--domain", "-d", help="Domain to show DNS records for"),
     program: Optional[str] = program_option,
     no_pager: Optional[bool] = no_pager_option
 ):
@@ -319,38 +320,41 @@ def show_commands(
         raise typer.Exit(1)
         
     async def run():
-        items = await handlers.handle_show_commands(type, program, resolved, unresolved, severity)
-        if items:
-            headers = get_headers_for_type(type)
-            
-            # Simplified logic: if either global or local no_pager is True, disable pagination
-            disable_pager = handlers.no_pager or no_pager
-            
-            if disable_pager:
-                # Display all results without pagination
-                console = Console()
-                terminal_width = shutil.get_terminal_size().columns
+        if type == 'dns':
+            await handlers.handle_dns_command(program, domain)
+        else:
+            items = await handlers.handle_show_commands(type, program, resolved, unresolved, severity)
+            if items:
+                headers = get_headers_for_type(type)
                 
-                # Calculate column widths
-                col_widths = CliPaginator().calculate_column_widths(headers, items, terminal_width)
+                # Simplified logic: if either global or local no_pager is True, disable pagination
+                disable_pager = handlers.no_pager or no_pager
                 
-                # Print headers
-                header_row = " | ".join(
-                    f"{h:<{w}}" for h, w in zip(headers, col_widths)
-                )
-                console.print(f"[bold]{header_row}[/]")
-                console.print("-" * min(sum(col_widths) + (len(headers) - 1) * 3, terminal_width))
-                
-                # Print items
-                for item in items:
-                    row = " | ".join(
-                        f"{str(field):<{w}}" for field, w in zip(item, col_widths)
+                if disable_pager:
+                    # Display all results without pagination
+                    console = Console()
+                    terminal_width = shutil.get_terminal_size().columns
+                    
+                    # Calculate column widths
+                    col_widths = CliPaginator().calculate_column_widths(headers, items, terminal_width)
+                    
+                    # Print headers
+                    header_row = " | ".join(
+                        f"{h:<{w}}" for h, w in zip(headers, col_widths)
                     )
-                    console.print(row)
-            else:
-                # Use pagination
-                paginator = CliPaginator()
-                await paginator.paginate(items, headers)
+                    console.print(f"[bold]{header_row}[/]")
+                    console.print("-" * min(sum(col_widths) + (len(headers) - 1) * 3, terminal_width))
+                    
+                    # Print items
+                    for item in items:
+                        row = " | ".join(
+                            f"{str(field):<{w}}" for field, w in zip(item, col_widths)
+                        )
+                        console.print(row)
+                else:
+                    # Use pagination
+                    paginator = CliPaginator()
+                    await paginator.paginate(items, headers)
             
     asyncio.run(run())
 
