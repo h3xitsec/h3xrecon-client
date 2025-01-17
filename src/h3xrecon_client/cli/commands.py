@@ -36,6 +36,7 @@ timeout_option = typer.Option(300, "--timeout", help="Timeout for job execution 
 
 # Add trigger_new_jobs option to the global options at the top
 no_trigger_option = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
@@ -411,6 +412,7 @@ def add_commands(
     type: str = typer.Argument(..., help="Type: domain, ip, website, website_path"),
     item: str = typer.Argument(..., help="Item to add"),
     program: Optional[str] = program_option,
+    no_trigger: bool = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
     stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin")
 ):
     """Add reconnaissance assets"""
@@ -429,7 +431,7 @@ def add_commands(
     else:
         items = [item]
 
-    asyncio.run(handlers.handle_add_commands(type, program, items))
+    asyncio.run(handlers.handle_add_commands(type, program, items, no_trigger))
 
 if __name__ == "__main__":
     app()

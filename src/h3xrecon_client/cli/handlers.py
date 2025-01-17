@@ -450,7 +450,7 @@ class CommandHandlers:
             else:
                 self.console.print(str(item)) 
 
-    async def handle_add_commands(self, type_name: str, program: str, items: List[str]) -> None:
+    async def handle_add_commands(self, type_name: str, program: str, items: List[str], no_trigger: bool = False) -> None:
         """Handle add commands for domains, IPs, and URLs"""
         try:
             if not program:
@@ -472,7 +472,7 @@ class CommandHandlers:
                 items = [items]
 
             # Add items through the API
-            result = await self.api.add_item(type_name, program, items)
+            result = await self.api.add_item(type_name, program, items, no_trigger)
             if result.success:
                 self.console.print(f"[green]Successfully added {len(items)} {type_name}(s) to program '{program}'[/]")
             else:

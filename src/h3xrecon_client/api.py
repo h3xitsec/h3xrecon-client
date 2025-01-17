@@ -369,6 +369,8 @@ class ClientAPI:
         
         query = """
         INSERT INTO program_cidrs (program_id, cidr) VALUES ($1, $2)
+        ON CONFLICT (program_id, cidr) DO NOTHING
+        RETURNING (xmax = 0) AS inserted, id
         """
         result = await self.db._write_records(query, program_id, cidr)
         if result.success and isinstance(result.data, list) and len(result.data) > 0:
@@ -803,7 +805,7 @@ class ClientAPI:
             result = await self.db._fetch_records(query, program_name)
         return result
     
-    async def add_item(self, item_type: str, program_name: str, items: Union[str, List[str]]) -> DbResult:
+    async def add_item(self, item_type: str, program_name: str, items: Union[str, List[str]], no_trigger: bool = False) -> DbResult:
         """
         Add items (domains, IPs, or URLs) to a program through the queue.
         
@@ -838,7 +840,7 @@ class ClientAPI:
                 "program_id": program_id,
                 "data_type": item_type,
                 "data": formatted_items,
-                "trigger_new_jobs": True,
+                "trigger_new_jobs": not no_trigger,
                 "execution_id": None
             }
 
@@ -1032,7 +1034,7 @@ class ClientAPI:
                 "params": params,
                 "trigger_new_jobs": trigger_new_jobs
             }
-
+            print(message)
             await self.queue.connect()
             await self.queue.publish_message(
                 subject="recon.input",
