@@ -1034,7 +1034,6 @@ class ClientAPI:
                 "params": params,
                 "trigger_new_jobs": trigger_new_jobs
             }
-            print(message)
             await self.queue.connect()
             await self.queue.publish_message(
                 subject="recon.input",
