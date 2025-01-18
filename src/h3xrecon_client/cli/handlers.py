@@ -190,7 +190,7 @@ class CommandHandlers:
                         try:
                             messages = await self.client_queue.get_stream_messages(stream)
                             for msg in messages:
-                                self.console.print(msg)
+                                self.console.print(msg["data"])
                         except StreamLockedException:
                             self.console.print("[red]Error: Stream is locked[/]")
                     elif arg2 == 'flush':
