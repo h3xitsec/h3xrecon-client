@@ -37,6 +37,9 @@ timeout_option = typer.Option(300, "--timeout", help="Timeout for job execution 
 # Add trigger_new_jobs option to the global options at the top
 no_trigger_option = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
 
+# Add mode option to the global options at the top
+mode_option = typer.Option(None, "--mode", help="Plugin run mode")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
@@ -45,7 +48,8 @@ def main(
     wildcard: bool = wildcard_option,
     regex: Optional[str] = regex_option,
     no_trigger: bool = no_trigger_option,
-    timeout: int = timeout_option
+    timeout: int = timeout_option,
+    mode: Optional[str] = mode_option
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -61,6 +65,7 @@ def main(
         handlers.regex_scope = regex
     handlers.no_trigger = no_trigger
     handlers.timeout = timeout
+    handlers.mode = mode
 
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
@@ -372,6 +377,34 @@ def get_headers_for_type(type_name):
     }
     return headers_map.get(type_name, [])
 
+@app.command("workflow")
+def workflow_commands(
+    name: str = typer.Argument(..., help="workflow function to execute (e.g., dns_resolve)"),
+    target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
+    force: bool = typer.Option(False, "--force", help="Force job execution"),
+    program: Optional[str] = program_option
+):
+    """Execute workflow functions (combined functions) on targets"""
+    program = get_program(program)
+    if not program:
+        typer.echo("Error: No program specified. Use -p/--program option.")
+        raise typer.Exit(1)
+
+    # Handle stdin input when target is '-'
+    if target == '-':
+        targets = []
+        for line in sys.stdin:
+            line = line.strip()
+            if line:  # Skip empty lines
+                targets.append(line)
+        if not targets:
+            typer.echo("Error: No targets received from stdin")
+            raise typer.Exit(1)
+    else:
+        targets = [target]
+
+    asyncio.run(handlers.handle_workflow_command(name, program, targets, force))
+    
 @app.command("sendjob")
 def sendjob_command(
     function_name: str = typer.Argument(..., help="Function to execute"),
@@ -381,7 +414,8 @@ def sendjob_command(
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
     program: Optional[str] = program_option,
     wordlist: Optional[str] = wordlist_option,
-    timeout: int = timeout_option
+    timeout: int = timeout_option,
+    mode: Optional[str] = mode_option
 ):
     """Send job to worker"""
     program = get_program(program)
@@ -401,8 +435,20 @@ def sendjob_command(
             raise typer.Exit(1)
     else:
         targets = [target]
-
-    asyncio.run(handlers.handle_sendjob_command(function_name, targets, program, force, params or [], wordlist, no_trigger, timeout))
+        job_params = {
+            "function_name": function_name,
+            "targets": targets,
+            "program": program,
+            "force": force,
+            "params": params or {},
+            "wordlist": wordlist,
+            "no_trigger": no_trigger,
+            "timeout": timeout,
+        }
+        if mode:
+            job_params["mode"] = mode
+        #print(job_params)
+        asyncio.run(handlers.handle_sendjob_command(**job_params))
 
 @app.command("console")
 def console_mode():

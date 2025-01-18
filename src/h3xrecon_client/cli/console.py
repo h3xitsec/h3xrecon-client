@@ -487,7 +487,11 @@ class H3xReconConsole(CommandHandlers):
             target = parts[2]
             force = '--force' in parts
             params = [p for p in parts[3:] if p != '--force']
-            await self.handle_sendjob_command(function_name, target, self.current_program, force, params)
+            mode = None
+            if '--mode' in parts:
+                mode_idx = parts.index('--mode')
+                mode = parts[mode_idx + 1]
+            await self.handle_sendjob_command(function_name, target, self.current_program, force, params, mode)
             
         elif cmd == 'add' and len(parts) > 2:
             if not self.current_program:

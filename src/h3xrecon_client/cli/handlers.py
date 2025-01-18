@@ -1,6 +1,7 @@
 from rich.console import Console
 from rich.table import Table
 from ..api import ClientAPI
+from ..config import ClientConfig
 from ..queue import ClientQueue, StreamLockedException
 from typing import Optional, List, Dict, Any
 import yaml
@@ -76,6 +77,7 @@ class CommandHandlers:
         
         # Job commands
         table.add_row("sendjob <function> <target> [params...] [--force]", "Send job to worker")
+        table.add_row("meta <function> <target> [params...] [--force]", "Send meta job to worker")
         
         # General commands
         table.add_row("help", "Show this help message")
@@ -434,9 +436,71 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
             return None
+    
+    async def handle_workflow_command(self, name: str, program: str, targets: List[str], force: bool = False):
+        """Handle workflow command"""
+        try:
+            if not name:
+                self.console.print("[red]Error: Workflow name is required[/]")
+                return
+                
+            if not program:
+                self.console.print("[red]Error: Program name is required[/]")
+                return
+                
+            if not targets:
+                self.console.print("[red]Error: At least one target is required[/]")
+                return
 
-    async def handle_sendjob_command(self, function_name: str, targets: List[str], program: str, 
-                                   force: bool = False, params: List[str] = None, wordlist: str = None, no_trigger: bool = False, timeout: int = None) -> None:
+            # First check if program exists
+            programs = await self.api.get_programs()
+            if not programs.success:
+                self.console.print(f"[red]Error: Could not verify program: {programs.error}[/]")
+                return
+                
+            if not any(p.get("name") == program for p in programs.data):
+                self.console.print(f"[red]Error: Program '{program}' not found[/]")
+                return
+
+            total_targets = len(targets)
+            successful_jobs = 0
+            jobs = ClientConfig().workflows.get(name, {}).get('jobs', [])
+            if not jobs:
+                self.console.print(f"[red]Error: Unknown workflow: {name}[/]")
+                return
+            for target in targets:
+                for job in jobs:
+                    job["params"] = job.get("params", {})
+                    job['params']['target'] = target
+                    job['program_name'] = program
+                    job['params']['extra_params'] = job.get("params", {}).get("extra_params", [])
+                    job["force"] = job.get("force", force)
+                    job["trigger_new_jobs"] = job.get("trigger_new_jobs", True)
+                    result = await self.api.send_job(**job)
+                    if result and result.success:
+                        successful_jobs += 1
+                    else:
+                        error_msg = result.error if result else "Unknown error"
+                        self.console.print(f"[red]Error sending job for target {target}: {error_msg}[/]")
+
+            if successful_jobs == total_targets * len(jobs):
+                self.console.print(f"[green]All {total_targets * len(jobs)} workflow jobs sent successfully[/]")
+            else:
+                self.console.print(f"[yellow]{successful_jobs} out of {total_targets * len(jobs)} jobs sent successfully[/]")
+                
+        except Exception as e:
+            self.console.print(f"[red]Error: {str(e)}[/]")
+    
+    async def handle_sendjob_command(self, 
+                                     function_name: str, 
+                                     targets: List[str], 
+                                     program: str, 
+                                     force: bool = False, 
+                                     params: List[str] = None, 
+                                     wordlist: str = None, 
+                                     no_trigger: bool = False, 
+                                     timeout: int = None,
+                                     mode: str = None) -> None:
         """Handle sendjob command"""
         try:
             # First check if program exists
@@ -453,18 +517,21 @@ class CommandHandlers:
             successful_jobs = 0
 
             for target in targets:
-                result = await self.api.send_job(
-                    function_name=function_name,
-                    program_name=program,
-                    trigger_new_jobs=not no_trigger,
-                    params={
+                job = {
+                    "function_name": function_name,
+                    "program_name": program,
+                    "trigger_new_jobs": not no_trigger,
+                    "params": {
                         "target": target,
                         "extra_params": params or [],
                         "wordlist": wordlist,
-                        "timeout": timeout
+                        "timeout": timeout,
+                        "mode": mode
                     },
-                    force=force
-                )
+                    "force": force
+                }
+                #print(job)
+                result = await self.api.send_job(**job)
                 
                 if result and result.success:
                     successful_jobs += 1

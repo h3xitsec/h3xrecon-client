@@ -68,6 +68,7 @@ class ClientConfig:
         self.nats = NatsConfig(**config.get('nats', {}))
         self.logging = LogConfig(**config.get('logging', {}))
         self.redis = RedisConfig(**config.get('redis', {}))
+        self.workflows = config.get('workflows', {})
     
     def _load_client_config_file(self):
         """Load configuration from a JSON file."""
