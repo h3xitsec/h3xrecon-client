@@ -265,7 +265,10 @@ class CommandHandlers:
                 else:
                     result = await self.api.get_domains(program)
                 if result.success:
-                    return [(d['domain'], d.get('resolved_ips', 'N/A'), d.get('cnames', 'N/A'), d.get('is_catchall', 'unknown')) for d in result.data]
+                    return [{'Domain': d['domain'], 
+                            'IPs': d.get('resolved_ips', 'N/A'), 
+                            'CNAMEs': d.get('cnames', 'N/A'), 
+                            'Catchall': d.get('is_catchall', 'unknown')} for d in result.data]
                 
             elif type_name == 'ips':
                 if resolved:
@@ -274,49 +277,58 @@ class CommandHandlers:
                     result = await self.api.get_not_reverse_resolved_ips(program)
                 else:
                     result = await self.api.get_ips(program)
-                return [(ip['ip'], ip.get('ptr', 'N/A'), ip.get('cloud_provider', 'unknown')) for ip in result.data]
+                return [{'IP': ip['ip'], 
+                        'PTR': ip.get('ptr', 'N/A'), 
+                        'Cloud Provider': ip.get('cloud_provider', 'unknown')} for ip in result.data]
                 
             elif type_name == 'websites':
                 result = await self.api.get_websites(program)
-                return [(website['url'], website.get('host', 'N/A'), website.get('port', 'N/A'), website.get('scheme', 'N/A'), website.get('techs', 'N/A')) for website in result.data]
+                return [{'URL': website['url'], 
+                        'Host': website.get('host', 'N/A'), 
+                        'Port': website.get('port', 'N/A'), 
+                        'Scheme': website.get('scheme', 'N/A'), 
+                        'Techs': website.get('techs', 'N/A')} for website in result.data]
             elif type_name == 'websites_paths':
                 result = await self.api.get_websites_paths(program)
-                return [(website.get('url', 'N/A'), website.get('path', 'N/A'), website.get('final_path', 'N/A'), website.get('status_code', 'N/A'), website.get('content_type', 'N/A')) for website in result.data]
+                return [{'URL': website.get('url', 'N/A'), 
+                        'Path': website.get('path', 'N/A'), 
+                        'Final Path': website.get('final_path', 'N/A'), 
+                        'Status Code': website.get('status_code', 'N/A'), 
+                        'Content Type': website.get('content_type', 'N/A')} for website in result.data]
             elif type_name == 'services':
                 result = await self.api.get_services(program)
-                return [(
-                    service['ip'],
-                    service.get('port', 'N/A'),
-                    service.get('service', 'unknown'),
-                    service.get('protocol', 'N/A'),
-                    service.get('ptr', 'unknown')
-                ) for service in result.data]
+                return [{
+                    'IP': service['ip'],
+                    'Port': service.get('port', 'N/A'),
+                    'Service': service.get('service', 'unknown'),
+                    'Protocol': service.get('protocol', 'N/A'),
+                    'Resolved Hostname': service.get('ptr', 'unknown')
+                } for service in result.data]
                 
             elif type_name == 'nuclei':
                 result = await self.api.get_nuclei(program, severity=severity)
-                return [(
-                    finding['url'],
-                    finding.get('template_id', 'unknown'),
-                    finding.get('severity', 'unknown'),
-                    finding.get('name', 'N/A')
-                ) for finding in result.data]
+                return [{
+                    'Target': finding['url'],
+                    'Template': finding.get('template_id', 'unknown'),
+                    'Severity': finding.get('severity', 'unknown'),
+                    'Matcher Name': finding.get('name', 'N/A')
+                } for finding in result.data]
                 
             elif type_name == 'certificates':
                 result = await self.api.get_certificates(program)
-                return [(
-                    cert.get('subject_cn', 'unknown'),
-                    cert.get('issuer', 'unknown'),
-                    cert.get('valid_until', 'unknown')
-                ) for cert in result.data]
+                return [{
+                    'Subject CN': cert.get('subject_cn', 'unknown'),
+                    'Issuer': cert.get('issuer', 'unknown'),
+                    'Valid Until': cert.get('valid_until', 'unknown')
+                } for cert in result.data]
             elif type_name == 'screenshots':
                 result = await self.api.get_screenshots(program)
-                return [(
-                    screenshot.get('url', 'unknown'),
-                    screenshot.get('filepath', 'unknown'),
-                    screenshot.get('md5_hash', 'unknown')
-                ) for screenshot in result.data]
+                return [{
+                    'URL': screenshot.get('url', 'unknown'),
+                    'Filepath': screenshot.get('filepath', 'unknown'),
+                    'MD5 Hash': screenshot.get('md5_hash', 'unknown')
+                } for screenshot in result.data]
 
-                
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
             return []
@@ -424,7 +436,7 @@ class CommandHandlers:
             return None
 
     async def handle_sendjob_command(self, function_name: str, targets: List[str], program: str, 
-                                   force: bool = False, params: List[str] = None, wordlist: str = None, no_trigger: bool = False, timeout: int = 300) -> None:
+                                   force: bool = False, params: List[str] = None, wordlist: str = None, no_trigger: bool = False, timeout: int = None) -> None:
         """Handle sendjob command"""
         try:
             # First check if program exists
@@ -507,19 +519,35 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error importing programs: {str(e)}[/]")
 
-    def display_table_results(self, data: List[Dict[str, Any]]) -> None:
+    def display_table_results(self, data: List[Any]) -> None:
         """Display results in table format"""
         if not data:
             self.console.print("[yellow]No results found[/]")
             return
 
         table = Table()
-        headers = list(data[0].keys())
-        for header in headers:
-            table.add_column(header.capitalize())
-
-        for row in data:
-            table.add_row(*[str(row[h]) for h in headers])
+        
+        # Handle both dictionary and tuple data formats
+        if isinstance(data[0], dict):
+            headers = list(data[0].keys())
+            for header in headers:
+                table.add_column(str(header))
+            
+            for row in data:
+                table.add_row(*[str(row[h]) for h in headers])
+        else:
+            # For legacy tuple data, use predefined headers based on the data structure
+            headers = ['Domain', 'IPs', 'CNAMEs', 'Catchall']  # Default headers for domain data
+            for header in headers:
+                table.add_column(header)
+            
+            for row in data:
+                # Convert all values to strings and handle None values
+                formatted_row = [
+                    str(val) if val is not None else 'None' 
+                    for val in row
+                ]
+                table.add_row(*formatted_row)
 
         self.console.print(table)
 
@@ -531,21 +559,29 @@ class CommandHandlers:
 
         for item in data:
             if type_name == 'domains':
-                if 'resolved_ips' in item:
-                    self.console.print(f"{item['domain']} -> {item['resolved_ips']}")
+                if 'IPs' in item:
+                    self.console.print(f"{item['Domain']} -> {item['IPs']}")
                 else:
-                    self.console.print(item['domain'])
+                    self.console.print(item['Domain'])
             elif type_name == 'ips':
-                if 'ptr' in item:
-                    self.console.print(f"{item['ip']} -> {item['ptr']}")
+                if 'PTR' in item:
+                    self.console.print(f"{item['IP']} -> {item['PTR']}")
                 else:
-                    self.console.print(item['ip'])
+                    self.console.print(item['IP'])
             elif type_name == 'services':
-                self.console.print(f"{item['protocol']}:{item['ip']}:{item['port']}")
+                self.console.print(f"{item['Protocol']}:{item['IP']}:{item['Port']}")
             elif type_name == 'certificates':
-                self.console.print(item['subject_cn'])
+                self.console.print(item['Subject CN'])
+            elif type_name == 'websites':
+                self.console.print(item['URL'])
+            elif type_name == 'websites_paths':
+                self.console.print(f"{item['URL']}{item['Path']}")
+            elif type_name == 'nuclei':
+                self.console.print(f"{item['Target']} - {item['Template']} ({item['Severity']})")
+            elif type_name == 'screenshots':
+                self.console.print(f"{item['URL']} -> {item['Filepath']}")
             else:
-                self.console.print(str(item)) 
+                self.console.print(str(item))
 
     async def handle_add_commands(self, type_name: str, program: str, items: List[str], no_trigger: bool = False) -> None:
         """Handle add commands for domains, IPs, and URLs"""

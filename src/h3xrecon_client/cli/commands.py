@@ -174,21 +174,21 @@ def list_commands(
             identifiers = []
             for item in items:
                 if type == 'domains':
-                    identifiers.append(item[0])  # domain
+                    identifiers.append(item['Domain'])  # domain
                 elif type == 'ips':
-                    identifiers.append(item[0])  # ip
+                    identifiers.append(item['IP'])  # ip
                 elif type == 'websites':
-                    identifiers.append(item[0])  # url
+                    identifiers.append(item['URL'])  # url
                 elif type == 'websites_paths':
-                    identifiers.append(item[0])  # url
+                    identifiers.append(item['URL'])  # url
                 elif type == 'services':
-                    identifiers.append(f"{item[0]}:{item[1]}")  # ip:port
+                    identifiers.append(f"{item['IP']}:{item['Port']}")  # ip:port
                 elif type == 'nuclei':
-                    identifiers.append(f"{item[0]} ({item[2]})")  # target (severity)
+                    identifiers.append(f"{item['Target']} ({item['Severity']})")  # target (severity)
                 elif type == 'certificates':
-                    identifiers.append(item[0])  # domain
+                    identifiers.append(item['Subject CN'])  # domain
                 elif type == 'screenshots':
-                    identifiers.append(item[0])  # screenshot
+                    identifiers.append(item['URL'])  # screenshot
             
             for identifier in identifiers:
                 typer.echo(identifier)
