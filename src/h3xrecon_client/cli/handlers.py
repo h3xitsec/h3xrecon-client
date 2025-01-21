@@ -532,12 +532,12 @@ class CommandHandlers:
                 }
                 #print(job)
                 result = await self.api.send_job(**job)
-                
-                if result and result.success:
-                    successful_jobs += 1
-                else:
-                    error_msg = result.error if result else "Unknown error"
-                    self.console.print(f"[red]Error sending job for target {target}: {error_msg}[/]")
+                self.console.print(result)
+                # if result and result.success:
+                #     successful_jobs += 1
+                # else:
+                #     error_msg = result.error if result else "Unknown error"
+                #     self.console.print(f"[red]Error sending job for target {target}: {error_msg}[/]")
 
             if successful_jobs == total_targets:
                 self.console.print(f"[green]All {total_targets} jobs sent successfully[/]")
