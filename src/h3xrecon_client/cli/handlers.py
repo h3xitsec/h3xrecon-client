@@ -503,7 +503,8 @@ class CommandHandlers:
                                      wordlist: str = None, 
                                      no_trigger: bool = False, 
                                      timeout: int = None,
-                                     mode: str = None) -> None:
+                                     mode: str = None,
+                                     need_response: bool = False) -> None:
         """Handle sendjob command"""
         try:
             # First check if program exists
@@ -531,16 +532,19 @@ class CommandHandlers:
                         "timeout": timeout,
                         "mode": mode
                     },
-                    "force": force
+                    "force": force,
+                    "need_response": need_response
                 }
-                #print(job)
                 result = await self.api.send_job(**job)
-                #self.console.print(result)
-                # if result and result.success:
-                #     successful_jobs += 1
-                # else:
-                #     error_msg = result.error if result else "Unknown error"
-                #     self.console.print(f"[red]Error sending job for target {target}: {error_msg}[/]")
+                if need_response:
+                    self.console.print(result)
+                    if result:
+                        successful_jobs += 1
+                    else:
+                        #error_msg = result.error if result else "Unknown error"
+                        self.console.print(f"[red]Error sending job for target {target}[/]")
+                else:
+                    successful_jobs += 1
 
             if successful_jobs == total_targets:
                 self.console.print(f"[green]All {total_targets} jobs sent successfully[/]")
