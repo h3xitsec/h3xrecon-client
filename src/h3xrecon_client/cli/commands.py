@@ -441,6 +441,7 @@ def sendjob_command(
     if target == '-':
         targets = []
         for line in sys.stdin:
+            print(line)
             line = line.strip()
             if line:  # Skip empty lines
                 targets.append(line)
@@ -449,21 +450,20 @@ def sendjob_command(
             raise typer.Exit(1)
     else:
         targets = [target]
-        job_params = {
-            "function_name": function_name,
-            "targets": targets,
-            "program": program,
-            "force": force,
-            "params": params or {},
-            "wordlist": wordlist,
-            "no_trigger": no_trigger,
-            "timeout": timeout,
-            "need_response": wait_ack
-        }
-        if mode:
-            job_params["mode"] = mode
-        #print(job_params)
-        asyncio.run(handlers.handle_sendjob_command(**job_params))
+    job_params = {
+        "function_name": function_name,
+        "targets": targets,
+        "program": program,
+        "force": force,
+        "params": params or {},
+        "wordlist": wordlist,
+        "no_trigger": no_trigger,
+        "timeout": timeout,
+        "need_response": wait_ack
+    }
+    if mode:
+        job_params["mode"] = mode
+    asyncio.run(handlers.handle_sendjob_command(**job_params))
 
 @app.command("console")
 def console_mode():

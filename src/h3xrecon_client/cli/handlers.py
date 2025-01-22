@@ -518,9 +518,10 @@ class CommandHandlers:
                 return
 
             total_targets = len(targets)
-            successful_jobs = 0
-
+            successful_jobs = 0 
+            print(targets)
             for target in targets:
+                
                 job = {
                     "function_name": function_name,
                     "program_name": program,
