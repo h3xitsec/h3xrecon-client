@@ -40,6 +40,8 @@ no_trigger_option = typer.Option(False, "--no-trigger", help="Do not trigger new
 # Add mode option to the global options at the top
 mode_option = typer.Option(None, "--mode", help="Plugin run mode")
 
+filter_option = typer.Option(None, "--filter", "-f", help="Filter")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
@@ -49,7 +51,8 @@ def main(
     regex: Optional[str] = regex_option,
     no_trigger: bool = no_trigger_option,
     timeout: int = timeout_option,
-    mode: Optional[str] = mode_option
+    mode: Optional[str] = mode_option,
+    filter: Optional[str] = filter_option,
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -66,6 +69,7 @@ def main(
     handlers.no_trigger = no_trigger
     handlers.timeout = timeout
     handlers.mode = mode
+    handlers.filter = filter
 
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
@@ -84,6 +88,7 @@ def program_commands(
 @app.command("system")
 def system_commands(
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
+    filter: str = typer.Option(None, "--filter", "-f", help="Filter")
 ):
     """
     System management commands
@@ -99,6 +104,8 @@ def system_commands(
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
         raise typer.Exit(1)
         
+    print(f"Filter value in system_commands: {filter}")  # Debug print
+    
     if args[0] == 'cache':
         asyncio.run(handlers.handle_system_commands_with_2_args(args[0], args[1]))
         return
@@ -112,7 +119,8 @@ def system_commands(
         if len(args) != 3:
             typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
             raise typer.Exit(1)
-        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2]))
+        print(f"Passing filter to handler: {filter}")  # Debug print
+        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2], filter=filter))
         return
     else:
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")

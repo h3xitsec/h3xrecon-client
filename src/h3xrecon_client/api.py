@@ -1057,41 +1057,42 @@ class ClientAPI:
                 "params": params,
                 "trigger_new_jobs": trigger_new_jobs
             }
+            print(f"recon.input.{function_name}")
             await self.queue.connect()
             await self.queue.publish_message(
-                subject="recon.input",
+                subject=f"recon.input.{function_name}",
                 stream="RECON_INPUT",
                 message=message
             )
             # Wait for responses
-            max_wait_time = 15  # seconds
-            start_time = asyncio.get_event_loop().time()
-            response = None
-            while True:
-                if (asyncio.get_event_loop().time() - start_time) > max_wait_time or response:
-                    break
-                try:
-                    msgs = await response_sub.fetch(batch=1, timeout=1)
-                    for msg in msgs:
-                        try:
-                            data = json.loads(msg.data.decode())
-                            if data.get('execution_id'):
-                                response = data
-                            else:
-                                response = None
-                            await msg.ack()
-                            break
-                        except json.JSONDecodeError:
-                            logger.error(f"Failed to decode message: {msg.data}")
-                            await msg.ack()
+            # max_wait_time = 2  # seconds
+            # start_time = asyncio.get_event_loop().time()
+            # response = None
+            # while True:
+            #     if (asyncio.get_event_loop().time() - start_time) > max_wait_time or response:
+            #         break
+            #     try:
+            #         msgs = await response_sub.fetch(batch=1, timeout=1)
+            #         for msg in msgs:
+            #             try:
+            #                 data = json.loads(msg.data.decode())
+            #                 if data.get('execution_id'):
+            #                     response = data
+            #                 else:
+            #                     response = None
+            #                 await msg.ack()
+            #                 break
+            #             except json.JSONDecodeError:
+            #                 logger.error(f"Failed to decode message: {msg.data}")
+            #                 await msg.ack()
                     
-                except Exception as e:
-                    if "timeout" not in str(e).lower():
-                        logger.error(f"Error fetching messages: {e}")
-                    await asyncio.sleep(0.1)
-            await self.queue.close()
+            #     except Exception as e:
+            #         if "timeout" not in str(e).lower():
+            #             logger.error(f"Error fetching messages: {e}")
+            #         await asyncio.sleep(0.1)
+            # await self.queue.close()
             
-            return response
+            # return response
             
         except Exception as e:
             logger.error(f"Error sending job: {str(e)}")

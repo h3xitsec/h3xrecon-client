@@ -7,6 +7,7 @@ import json
 import asyncio
 from .config import ClientConfig
 import nats.js.errors
+import time
 
 class ClientQueue:
     # Class-level storage for stream subjects (shared across instances)
@@ -124,53 +125,54 @@ class ClientQueue:
         try:
             await self.ensure_connected()
             js = self.nc.jetstream()
-            # Create a consumer with explicit configuration
-            consumer_config = {
-                "deliver_policy": "all",  # Get all messages
-                "ack_policy": "explicit",
-                "replay_policy": "instant",
-                "inactive_threshold": 300000000000  # 5 minutes in nanoseconds
-            }
-            # If subject is provided, use it for subscription
-            subscribe_subject = subject if subject else ">"
             
-            consumer = await js.pull_subscribe(
-                subscribe_subject,
-                durable=None,
-                stream=stream_name
+            # Create a consumer with explicit configuration using ConsumerConfig
+            consumer_config = ConsumerConfig(
+                durable_name=None,  # Ephemeral consumer
+                deliver_policy=DeliverPolicy.ALL,
+                ack_policy=AckPolicy.EXPLICIT,
+                replay_policy=ReplayPolicy.INSTANT,
+                max_deliver=1,
+                filter_subject=subject if subject else ">",  # Use the subject as filter if provided
             )
+            
+            # Create a consumer with the configuration
+            consumer = await js.pull_subscribe(
+                subject if subject else ">",
+                durable=None,  # Ephemeral consumer
+                stream=stream_name,
+                config=consumer_config
+            )
+            
             messages = []
             try:
                 # Fetch messages
-                fetched = await consumer.fetch(batch_size)
+                fetched = await consumer.fetch(batch=batch_size, timeout=1)
                 for msg in fetched:
-                    # Get stream info for message counts
-                    stream_info = await js.stream_info(stream_name)
-                    message_data = {
-                        'subject': msg.subject,
-                        'data': msg.data.decode() if msg.data else None,
-                        'sequence': msg.metadata.sequence.stream if msg.metadata else None,
-                        'time': msg.metadata.timestamp if msg.metadata else None,
-                        'delivered_count': msg.metadata.num_delivered if msg.metadata else None,
-                        'pending_count': msg.metadata.num_pending if msg.metadata else None,
-                        'stream_total': stream_info.state.messages if stream_info.state else None,
-                        'is_redelivered': msg.metadata.num_delivered > 1 if msg.metadata else False
-                    }
-                    messages.append(message_data)
-                    
+                    try:
+                        message_data = {
+                            "data": json.loads(msg.data.decode()),
+                            "subject": msg.subject,
+                            "timestamp": msg.metadata.timestamp
+                        }
+                        messages.append(message_data)
+                        await msg.ack()
+                    except Exception as e:
+                        print(f"Error processing message: {e}")
+                        continue
             except Exception as e:
-                print(f"Error fetching messages: {str(e)}")
-            
+                print(f"Error fetching messages: {e}")
+            finally:
+                # Clean up by unsubscribing
+                try:
+                    await consumer.unsubscribe()
+                except Exception as e:
+                    print(f"Error unsubscribing consumer: {e}")
+                    
             return messages
-            
         except Exception as e:
-            print(f"NATS connection error: {str(e)}")
+            print(f"Error in get_stream_messages: {e}")
             return []
-        finally:
-            try:
-                await self.nc.close()
-            except:
-                pass
     
     async def flush_stream(self, stream_name: str):
         """Flush all messages from a NATS stream

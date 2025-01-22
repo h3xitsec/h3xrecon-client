@@ -133,7 +133,7 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
-    async def handle_system_commands_with_3_args(self, arg1: str, arg2: str, arg3: str = None) -> None:
+    async def handle_system_commands_with_3_args(self, arg1: str, arg2: str, arg3: str = None, filter: str = None) -> None:
         """Handle system management commands"""
         try:
             if arg1 == 'status' and arg2 == 'flush':
@@ -188,7 +188,10 @@ class CommandHandlers:
                         self.console.print(info)
                     elif arg2 == 'messages':
                         try:
-                            messages = await self.client_queue.get_stream_messages(stream)
+                            subject = None
+                            if filter:
+                                subject = f"recon.input.{filter}"
+                            messages = await self.client_queue.get_stream_messages(stream, subject=subject)
                             for msg in messages:
                                 self.console.print(msg["data"])
                         except StreamLockedException:
@@ -532,7 +535,7 @@ class CommandHandlers:
                 }
                 #print(job)
                 result = await self.api.send_job(**job)
-                self.console.print(result)
+                #self.console.print(result)
                 # if result and result.success:
                 #     successful_jobs += 1
                 # else:
