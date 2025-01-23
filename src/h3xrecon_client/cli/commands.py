@@ -37,6 +37,15 @@ timeout_option = typer.Option(300, "--timeout", help="Timeout for job execution 
 # Add trigger_new_jobs option to the global options at the top
 no_trigger_option = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
 
+# Add mode option to the global options at the top
+mode_option = typer.Option(None, "--mode", help="Plugin run mode")
+
+# Add a filter option to the global options at the top
+filter_option = typer.Option(None, "--filter", "-f", help="Filter")
+
+# Add a ack option to the global options at the top
+wait_ack_option = typer.Option(False, "--wait-ack", "-w", help="Wait for job request response")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
@@ -45,7 +54,10 @@ def main(
     wildcard: bool = wildcard_option,
     regex: Optional[str] = regex_option,
     no_trigger: bool = no_trigger_option,
-    timeout: int = timeout_option
+    timeout: int = timeout_option,
+    mode: Optional[str] = mode_option,
+    filter: Optional[str] = filter_option,
+    wait_ack: bool = wait_ack_option,
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -61,7 +73,9 @@ def main(
         handlers.regex_scope = regex
     handlers.no_trigger = no_trigger
     handlers.timeout = timeout
-
+    handlers.mode = mode
+    handlers.filter = filter
+    handlers.wait_ack = wait_ack
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
     return cmd_program or handlers.current_program
@@ -79,6 +93,7 @@ def program_commands(
 @app.command("system")
 def system_commands(
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
+    filter: str = typer.Option(None, "--filter", "-f", help="Filter")
 ):
     """
     System management commands
@@ -94,6 +109,8 @@ def system_commands(
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
         raise typer.Exit(1)
         
+    print(f"Filter value in system_commands: {filter}")  # Debug print
+    
     if args[0] == 'cache':
         asyncio.run(handlers.handle_system_commands_with_2_args(args[0], args[1]))
         return
@@ -107,7 +124,8 @@ def system_commands(
         if len(args) != 3:
             typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
             raise typer.Exit(1)
-        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2]))
+        print(f"Passing filter to handler: {filter}")  # Debug print
+        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2], filter=filter))
         return
     else:
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
@@ -372,18 +390,14 @@ def get_headers_for_type(type_name):
     }
     return headers_map.get(type_name, [])
 
-@app.command("sendjob")
-def sendjob_command(
-    function_name: str = typer.Argument(..., help="Function to execute"),
+@app.command("workflow")
+def workflow_commands(
+    name: str = typer.Argument(..., help="workflow function to execute (e.g., dns_resolve)"),
     target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
     force: bool = typer.Option(False, "--force", help="Force job execution"),
-    no_trigger: bool = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
-    params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
-    program: Optional[str] = program_option,
-    wordlist: Optional[str] = wordlist_option,
-    timeout: int = timeout_option
+    program: Optional[str] = program_option
 ):
-    """Send job to worker"""
+    """Execute workflow functions (combined functions) on targets"""
     program = get_program(program)
     if not program:
         typer.echo("Error: No program specified. Use -p/--program option.")
@@ -402,7 +416,54 @@ def sendjob_command(
     else:
         targets = [target]
 
-    asyncio.run(handlers.handle_sendjob_command(function_name, targets, program, force, params or [], wordlist, no_trigger, timeout))
+    asyncio.run(handlers.handle_workflow_command(name, program, targets, force))
+    
+@app.command("sendjob")
+def sendjob_command(
+    function_name: str = typer.Argument(..., help="Function to execute"),
+    target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
+    force: bool = typer.Option(False, "--force", help="Force job execution"),
+    no_trigger: bool = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
+    params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
+    program: Optional[str] = program_option,
+    wordlist: Optional[str] = wordlist_option,
+    timeout: int = timeout_option,
+    mode: Optional[str] = mode_option,
+    wait_ack: bool = wait_ack_option
+):
+    """Send job to worker"""
+    program = get_program(program)
+    if not program:
+        typer.echo("Error: No program specified. Use -p/--program option.")
+        raise typer.Exit(1)
+
+    # Handle stdin input when target is '-'
+    if target == '-':
+        targets = []
+        for line in sys.stdin:
+            print(line)
+            line = line.strip()
+            if line:  # Skip empty lines
+                targets.append(line)
+        if not targets:
+            typer.echo("Error: No targets received from stdin")
+            raise typer.Exit(1)
+    else:
+        targets = [target]
+    job_params = {
+        "function_name": function_name,
+        "targets": targets,
+        "program": program,
+        "force": force,
+        "params": params or {},
+        "wordlist": wordlist,
+        "no_trigger": no_trigger,
+        "timeout": timeout,
+        "need_response": wait_ack
+    }
+    if mode:
+        job_params["mode"] = mode
+    asyncio.run(handlers.handle_sendjob_command(**job_params))
 
 @app.command("console")
 def console_mode():

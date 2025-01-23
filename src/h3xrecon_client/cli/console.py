@@ -331,9 +331,46 @@ class H3xReconConsole(CommandHandlers):
             self.console.print("-" * min(sum(col_widths) + (len(headers) - 1) * 3, terminal_width))
             
             # Print items
+            header_to_key = {
+                'Domain': 'Domain',
+                'CNAMEs': 'CNAMEs',
+                'CatchAll': 'Catchall',
+                'IP': 'IP',
+                'PTR': 'PTR',
+                'Cloud Provider': 'CloudProvider',
+                'URL': 'URL',
+                'Host': 'Host',
+                'Port': 'Port',
+                'Scheme': 'Scheme',
+                'Techs': 'Techs',
+                'Path': 'Path',
+                'Final Path': 'FinalPath',
+                'Status Code': 'StatusCode',
+                'Content Type': 'ContentType',
+                'Service': 'Service',
+                'Version': 'Version',
+                'Template': 'Template',
+                'Severity': 'Severity',
+                'Name': 'Name',
+                'Issuer': 'Issuer',
+                'Valid Until': 'ValidUntil',
+                'Screenshot': 'Screenshot',
+                'MD5 Hash': 'MD5Hash'
+            }
+            
             for item in page_items:
+                row_values = []
+                for header in headers:
+                    key = header_to_key.get(header, header)
+                    value = item.get(key, '')
+                    if isinstance(value, list):
+                        value = ', '.join(str(v) for v in value if v is not None)
+                    elif value is None:
+                        value = ''
+                    row_values.append(str(value))
+                
                 row = " | ".join(
-                    f"{str(field):<{w}}" for field, w in zip(item, col_widths)
+                    f"{str(value):<{w}}" for value, w in zip(row_values, col_widths)
                 )
                 self.console.print(row)
         else:
@@ -344,8 +381,45 @@ class H3xReconConsole(CommandHandlers):
         """Calculate optimal column widths based on content and terminal width"""
         # Get max width for each column
         widths = []
-        for i in range(len(headers)):
-            column_content = [str(item[i]) for item in items] + [headers[i]]
+        header_to_key = {
+            'Domain': 'Domain',
+            'CNAMEs': 'CNAMEs',
+            'CatchAll': 'Catchall',
+            'IP': 'IP',
+            'PTR': 'PTR',
+            'Cloud Provider': 'CloudProvider',
+            'URL': 'URL',
+            'Host': 'Host',
+            'Port': 'Port',
+            'Scheme': 'Scheme',
+            'Techs': 'Techs',
+            'Path': 'Path',
+            'Final Path': 'FinalPath',
+            'Status Code': 'StatusCode',
+            'Content Type': 'ContentType',
+            'Service': 'Service',
+            'Version': 'Version',
+            'Template': 'Template',
+            'Severity': 'Severity',
+            'Name': 'Name',
+            'Issuer': 'Issuer',
+            'Valid Until': 'ValidUntil',
+            'Screenshot': 'Screenshot',
+            'MD5 Hash': 'MD5Hash'
+        }
+
+        for header in headers:
+            key = header_to_key.get(header, header)
+            # Get values for this column, handling potential missing keys
+            column_content = []
+            for item in items:
+                value = item.get(key, '')
+                if isinstance(value, list):
+                    value = ', '.join(str(v) for v in value if v is not None)
+                elif value is None:
+                    value = ''
+                column_content.append(str(value))
+            column_content.append(header)  # Add header to content for width calculation
             max_width = max(len(str(c)) for c in column_content)
             widths.append(max_width)
             
@@ -367,21 +441,21 @@ class H3xReconConsole(CommandHandlers):
             identifiers = []
             for item in items:
                 if type_name == 'domains':
-                    identifiers.append(item[0])  # domain
+                    identifiers.append(item)  # domain
                 elif type_name == 'ips':
-                    identifiers.append(item[0])  # ip
+                    identifiers.append(item)  # ip
                 elif type_name == 'websites':
-                    identifiers.append(item[0])  # url
+                    identifiers.append(item)  # url
                 elif type_name == 'websites_paths':
-                    identifiers.append(item[0])  # url
+                    identifiers.append(item)  # url
                 elif type_name == 'services':
-                    identifiers.append(f"{item[0]}:{item[1]}")  # ip:port
+                    identifiers.append(f"{item}:{item[1]}")  # ip:port
                 elif type_name == 'nuclei':
-                    identifiers.append(f"{item[0]} ({item[2]})")  # target (severity)
+                    identifiers.append(f"{item} ({item[2]})")  # target (severity)
                 elif type_name == 'certificates':
-                    identifiers.append(item[0])  # domain
+                    identifiers.append(item)  # domain
                 elif type_name == 'screenshots':
-                    identifiers.append(item[0])  # url
+                    identifiers.append(item)  # url
             
             # Display paginated list of identifiers
             await self.display_paginated_items(identifiers)
@@ -396,7 +470,7 @@ class H3xReconConsole(CommandHandlers):
     def get_headers_for_type(self, type_name):
         """Return headers based on asset type"""
         headers_map = {
-            'domains': ['Domain', 'CNAMEs', 'CatchAll'],
+            'domains': ['Domain', 'CNAMEs', 'IPs', 'CatchAll'],
             'ips': ['IP', 'PTR', 'Cloud Provider'],
             'websites': ['URL', 'Host', 'Port', 'Scheme', 'Techs'],
             'websites_paths': ['URL', 'Path', 'Final Path', 'Status Code', 'Content Type'],
@@ -487,7 +561,11 @@ class H3xReconConsole(CommandHandlers):
             target = parts[2]
             force = '--force' in parts
             params = [p for p in parts[3:] if p != '--force']
-            await self.handle_sendjob_command(function_name, target, self.current_program, force, params)
+            mode = None
+            if '--mode' in parts:
+                mode_idx = parts.index('--mode')
+                mode = parts[mode_idx + 1]
+            await self.handle_sendjob_command(function_name, target, self.current_program, force, params, mode)
             
         elif cmd == 'add' and len(parts) > 2:
             if not self.current_program:
