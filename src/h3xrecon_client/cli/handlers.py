@@ -544,7 +544,7 @@ class CommandHandlers:
                     self.console.print(f"Waiting for acknowledgement from a recon worker...")
                     response = await self.api.wait_for_response(response_id=job['response_id'], timeout=120, response_sub=response_sub)
                     if response:
-                        self.console.print(f"Worker: {response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
+                        self.console.print(f"{response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
                         successful_jobs += 1
                     else:
                         self.console.print(f"[red]Error: No response received from recon worker[/]")
@@ -556,10 +556,10 @@ class CommandHandlers:
             else:
                 self.console.print(f"[yellow]{successful_jobs} out of {total_targets} jobs sent successfully[/]")
             if response_id:
-                self.console.print("Waiting for completion confirmation from recon worker...")
+                self.console.print("Waiting for completion confirmation from parsing worker...")
                 response = await self.api.wait_for_response(response_id=job['response_id'], timeout=120, response_sub=response_sub)
                 if response:
-                    self.console.print(f"Worker: {response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
+                    self.console.print(f"{response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
                 else:
                     self.console.print(f"[red]Error: No response received from recon worker[/]")
         except Exception as e:
