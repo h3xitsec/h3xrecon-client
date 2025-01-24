@@ -5,6 +5,7 @@ from ..config import ClientConfig
 from ..queue import ClientQueue, StreamLockedException
 from typing import Optional, List, Dict, Any
 import yaml
+import uuid
 import typer
 
 class CommandHandlers:
@@ -504,7 +505,7 @@ class CommandHandlers:
                                      no_trigger: bool = False, 
                                      timeout: int = None,
                                      mode: str = None,
-                                     need_response: bool = False) -> None:
+                                     response_id: bool = False) -> None:
         """Handle sendjob command"""
         try:
             # First check if program exists
@@ -519,7 +520,6 @@ class CommandHandlers:
 
             total_targets = len(targets)
             successful_jobs = 0 
-            print(targets)
             for target in targets:
                 
                 job = {
@@ -534,16 +534,20 @@ class CommandHandlers:
                         "mode": mode
                     },
                     "force": force,
-                    "need_response": need_response
+                    "response_id": response_id
                 }
+                if response_id:
+                    response_sub = await self.client_queue.create_jobrequest_response_sub(job['response_id'])
                 result = await self.api.send_job(**job)
-                if need_response:
-                    self.console.print(result)
-                    if result:
+                self.console.print(f"Job sent for target {target}")
+                if response_id:
+                    self.console.print(f"Waiting for acknowledgement from a recon worker...")
+                    response = await self.api.wait_for_response(response_id=job['response_id'], timeout=120, response_sub=response_sub)
+                    if response:
+                        self.console.print(f"Worker: {response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
                         successful_jobs += 1
                     else:
-                        #error_msg = result.error if result else "Unknown error"
-                        self.console.print(f"[red]Error sending job for target {target}[/]")
+                        self.console.print(f"[red]Error: No response received from recon worker[/]")
                 else:
                     successful_jobs += 1
 
@@ -551,7 +555,13 @@ class CommandHandlers:
                 self.console.print(f"[green]All {total_targets} jobs sent successfully[/]")
             else:
                 self.console.print(f"[yellow]{successful_jobs} out of {total_targets} jobs sent successfully[/]")
-                
+            if response_id:
+                self.console.print("Waiting for completion confirmation from recon worker...")
+                response = await self.api.wait_for_response(response_id=job['response_id'], timeout=120, response_sub=response_sub)
+                if response:
+                    self.console.print(f"Worker: {response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
+                else:
+                    self.console.print(f"[red]Error: No response received from recon worker[/]")
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
