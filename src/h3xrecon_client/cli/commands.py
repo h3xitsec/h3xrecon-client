@@ -9,6 +9,7 @@ from rich.console import Console
 import shutil
 import math
 import sys
+import uuid
 
 app = typer.Typer(
     name="h3xrecon",
@@ -450,6 +451,10 @@ def sendjob_command(
             raise typer.Exit(1)
     else:
         targets = [target]
+    if wait_ack:
+        response_id = str(uuid.uuid4())
+    else:
+        response_id = None
     job_params = {
         "function_name": function_name,
         "targets": targets,
@@ -459,7 +464,7 @@ def sendjob_command(
         "wordlist": wordlist,
         "no_trigger": no_trigger,
         "timeout": timeout,
-        "need_response": wait_ack
+        "response_id": response_id
     }
     if mode:
         job_params["mode"] = mode

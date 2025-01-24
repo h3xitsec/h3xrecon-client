@@ -120,6 +120,21 @@ class ClientQueue:
             except:
                 pass
     
+    async def create_jobrequest_response_sub(self, response_id: str):
+        await self.ensure_connected()
+        """Create a response subscription for a job"""
+        response_sub = await self.js.pull_subscribe(
+            subject=f"control.response.jobrequest.{response_id}",
+            durable=None,
+            stream="CONTROL_RESPONSE_JOBREQUEST",
+            config=ConsumerConfig(
+                deliver_policy=DeliverPolicy.NEW,
+                ack_policy=AckPolicy.EXPLICIT,
+                max_deliver=1
+            )
+        )
+        return response_sub
+    
     async def get_stream_messages(self, stream_name: str, subject: str = None, batch_size: int = 100):
         """Get messages from a specific NATS stream"""
         try:

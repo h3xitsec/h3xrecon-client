@@ -154,7 +154,7 @@ class ClientAPI:
         except redis.exceptions.RedisError as e:
             logger.error(f"Redis error while getting processors: {str(e)}")
             return DbResult(success=False, error=str(e))
-
+    
     async def get_processor_status(self, processor_id: str):
         """Get processor status with Redis error handling.
         
@@ -1013,7 +1013,7 @@ class ClientAPI:
                     pass
             await self.queue.close()
     
-    async def send_job(self, function_name: str, program_name: str, params: dict, force: bool, trigger_new_jobs: bool = True, need_response: bool = False):
+    async def send_job(self, function_name: str, program_name: str, params: dict, force: bool, trigger_new_jobs: bool = True, response_id: str = None):
         """
         Send a job to the worker using QueueManager.
         
@@ -1028,78 +1028,62 @@ class ClientAPI:
         """
         try:
             await self.queue.connect()
-            try:
-                await self.queue.js.stream_info("CONTROL_RESPONSE_JOBREQUEST")
-            except Exception:
-                await self.queue.js.add_stream(
-                    name="CONTROL_RESPONSE_JOBREQUEST",
-                    subjects=["control.response.jobrequest"]
-                )
             program_id = await self.get_program_id(program_name)
             if not program_id:
                 return DbResult(success=False, error=f"Program '{program_name}' not found")
-            if need_response:
-                # Create ephemeral subscription for responses
-                response_sub = await self.queue.js.pull_subscribe(
-                    subject="control.response.jobrequest",
-                    durable=None,
-                    stream="CONTROL_RESPONSE_JOBREQUEST",
-                    config=ConsumerConfig(
-                        deliver_policy=DeliverPolicy.NEW,
-                        ack_policy=AckPolicy.EXPLICIT,
-                        max_deliver=1
-                    )
-                )
-
+            
             message = {
                 "force": force,
                 "function_name": function_name,
                 "program_id": program_id,
                 "params": params,
                 "trigger_new_jobs": trigger_new_jobs,
-                "need_response": True
+                "response_id": response_id
             }
-            await self.queue.connect()
             await self.queue.publish_message(
                 subject=f"recon.input.{function_name}",
                 stream="RECON_INPUT",
                 message=message
             )
             # Wait for responses
-            if need_response:
-                max_wait_time = 2  # seconds
-                start_time = asyncio.get_event_loop().time()
-                response = None
-                while True:
-                    if (asyncio.get_event_loop().time() - start_time) > max_wait_time or response:
-                        break
-                    try:
-                        msgs = await response_sub.fetch(batch=1, timeout=1)
-                        for msg in msgs:
-                            try:
-                                data = json.loads(msg.data.decode())
-                                if data.get('execution_id'):
-                                    response = data
-                                else:
-                                    response = None
-                                await msg.ack()
-                                break
-                            except json.JSONDecodeError:
-                                logger.error(f"Failed to decode message: {msg.data}")
-                                await msg.ack()
-                        
-                    except Exception as e:
-                        if "timeout" not in str(e).lower():
-                            logger.error(f"Error fetching messages: {e}")
-                        await asyncio.sleep(0.1)
-                await self.queue.close()
             
-                return response
             
         except Exception as e:
             logger.error(f"Error sending job: {str(e)}")
             return DbResult(success=False, error=str(e))
-
+        finally:
+            await self.queue.close()
+    
+    async def wait_for_response(self, response_id: str, timeout: int = 5, response_sub = None) -> List[Dict[str, Any]]:
+        await self.queue.connect()
+        
+        max_wait_time = timeout  # seconds
+        start_time = asyncio.get_event_loop().time()
+        response = None
+        while True:
+            if (asyncio.get_event_loop().time() - start_time) > max_wait_time or response:
+                break
+            try:
+                msgs = await response_sub.fetch(batch=1, timeout=1)
+                for msg in msgs:
+                    try:
+                        data = json.loads(msg.data.decode())
+                        if data.get('execution_id'):
+                            response = data
+                        else:
+                            response = None
+                        await msg.ack()
+                        break
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode message: {msg.data}")
+                        await msg.ack()
+                
+            except Exception as e:
+                if "timeout" not in str(e).lower():
+                    logger.error(f"Error fetching messages: {e}")
+                await asyncio.sleep(0.1)
+        await self.queue.close()
+        return response
     
     async def get_certificates(self, program_name: str = None):
         """Get certificates for a program."""
