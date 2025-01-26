@@ -47,6 +47,9 @@ filter_option = typer.Option(None, "--filter", "-f", help="Filter")
 # Add a ack option to the global options at the top
 wait_ack_option = typer.Option(False, "--wait-ack", "-w", help="Wait for job request response")
 
+# Add a debug option to the global options at the top
+debug_option = typer.Option(False, "--debug", "-d", help="Debug mode")
+
 @app.callback()
 def main(
     program: Optional[str] = program_option,
@@ -59,6 +62,7 @@ def main(
     mode: Optional[str] = mode_option,
     filter: Optional[str] = filter_option,
     wait_ack: bool = wait_ack_option,
+    debug: bool = debug_option,
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
@@ -77,6 +81,8 @@ def main(
     handlers.mode = mode
     handlers.filter = filter
     handlers.wait_ack = wait_ack
+    handlers.debug = debug
+    
 def get_program(cmd_program: Optional[str]) -> Optional[str]:
     """Get program from command option or global option"""
     return cmd_program or handlers.current_program
@@ -430,7 +436,8 @@ def sendjob_command(
     wordlist: Optional[str] = wordlist_option,
     timeout: int = timeout_option,
     mode: Optional[str] = mode_option,
-    wait_ack: bool = wait_ack_option
+    wait_ack: bool = wait_ack_option,
+    debug: bool = debug_option
 ):
     """Send job to worker"""
     program = get_program(program)
@@ -455,6 +462,11 @@ def sendjob_command(
         response_id = str(uuid.uuid4())
     else:
         response_id = None
+    
+    if debug:
+        debug_id = str(uuid.uuid4())
+    else:
+        debug_id = None
     job_params = {
         "function_name": function_name,
         "targets": targets,
@@ -464,7 +476,8 @@ def sendjob_command(
         "wordlist": wordlist,
         "no_trigger": no_trigger,
         "timeout": timeout,
-        "response_id": response_id
+        "response_id": response_id,
+        "debug_id": debug_id
     }
     if mode:
         job_params["mode"] = mode

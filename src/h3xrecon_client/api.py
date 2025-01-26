@@ -58,7 +58,7 @@ class ClientAPI:
             elif type in ["recon", "parsing", "data"]:
                 components = [key for key in all_keys if key.startswith(type)]
             else:
-                return CacheResult(success=False, error="Invalid component type")
+                components = [key for key in all_keys if key == type]
             
             return CacheResult(success=True, data=components)
         except redis.exceptions.RedisError as e:
@@ -1013,7 +1013,7 @@ class ClientAPI:
                     pass
             await self.queue.close()
     
-    async def send_job(self, function_name: str, program_name: str, params: dict, force: bool, trigger_new_jobs: bool = True, response_id: str = None):
+    async def send_job(self, **kwargs):
         """
         Send a job to the worker using QueueManager.
         
@@ -1028,20 +1028,21 @@ class ClientAPI:
         """
         try:
             await self.queue.connect()
-            program_id = await self.get_program_id(program_name)
+            program_id = await self.get_program_id(kwargs.get("program_name"))
             if not program_id:
-                return DbResult(success=False, error=f"Program '{program_name}' not found")
+                return DbResult(success=False, error=f"Program '{kwargs.get('program_name')}' not found")
             
             message = {
-                "force": force,
-                "function_name": function_name,
+                "force": kwargs.get("force"),
+                "function_name": kwargs.get("function_name"),
                 "program_id": program_id,
-                "params": params,
-                "trigger_new_jobs": trigger_new_jobs,
-                "response_id": response_id
+                "params": kwargs.get("params"),
+                "trigger_new_jobs": kwargs.get("trigger_new_jobs"),
+                "response_id": kwargs.get("response_id"),
+                "debug_id": kwargs.get("debug_id")
             }
             await self.queue.publish_message(
-                subject=f"recon.input.{function_name}",
+                subject=f"recon.input.{message.get('function_name')}",
                 stream="RECON_INPUT",
                 message=message
             )

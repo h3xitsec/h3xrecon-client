@@ -495,19 +495,20 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
     
-    async def handle_sendjob_command(self, 
-                                     function_name: str, 
-                                     targets: List[str], 
-                                     program: str, 
-                                     force: bool = False, 
-                                     params: List[str] = None, 
-                                     wordlist: str = None, 
-                                     no_trigger: bool = False, 
-                                     timeout: int = None,
-                                     mode: str = None,
-                                     response_id: bool = False) -> None:
+    async def handle_sendjob_command(self, **kwargs) -> None:
         """Handle sendjob command"""
         try:
+            function_name = kwargs.get("function_name")
+            targets = kwargs.get("targets")
+            program = kwargs.get("program")
+            force = kwargs.get("force")
+            params = kwargs.get("params")
+            wordlist = kwargs.get("wordlist")
+            no_trigger = kwargs.get("no_trigger")
+            timeout = kwargs.get("timeout")
+            mode = kwargs.get("mode")
+            response_id = kwargs.get("response_id")
+            debug_id = kwargs.get("debug_id")
             # First check if program exists
             programs = await self.api.get_programs()
             if not programs.success:
@@ -534,17 +535,20 @@ class CommandHandlers:
                         "mode": mode
                     },
                     "force": force,
-                    "response_id": response_id
+                    "response_id": response_id,
+                    "debug_id": debug_id
                 }
-                if response_id:
+                if debug_id:
+                    response_sub = await self.client_queue.create_jobrequest_response_sub(job['debug_id'])
+                elif response_id:
                     response_sub = await self.client_queue.create_jobrequest_response_sub(job['response_id'])
                 result = await self.api.send_job(**job)
                 self.console.print(f"Job sent for target {target}")
-                if response_id:
-                    self.console.print(f"Waiting for acknowledgement from a recon worker...")
-                    response = await self.api.wait_for_response(response_id=job['response_id'], timeout=120, response_sub=response_sub)
+                if response_id or debug_id:
+                    self.console.print(f"Waiting for {"output" if debug_id else "acknowledgement"} from a recon worker...")
+                    response = await self.api.wait_for_response(response_id=job['debug_id'] if debug_id else job['response_id'], timeout=120, response_sub=response_sub)
                     if response:
-                        self.console.print(f"{response.get('component_id')} - Status: {response.get('status')} - Execution ID: {response.get('execution_id')}")
+                        self.console.print(f"{response.get('component_id')}\n{'Output' if debug_id else 'Acknowledgement'}: {response.get('status')}\nExecution ID: {response.get('execution_id')}")
                         successful_jobs += 1
                     else:
                         self.console.print(f"[red]Error: No response received from recon worker[/]")
