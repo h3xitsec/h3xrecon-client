@@ -260,90 +260,79 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
-    async def handle_list_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
+    async def handle_list_commands(self, type_name, program, resolved=False, unresolved=False, severity=None, filter=None):
         """Handle list commands"""
         try:
-            if type_name == 'domains':
-                if resolved:
-                    result = await self.api.get_resolved_domains(program)
-                elif unresolved:
-                    result = await self.api.get_unresolved_domains(program)
-                else:
-                    result = await self.api.get_domains(program)
-                if result.success:
-                    return [{'Domain': d['domain'], 
-                            'IPs': d.get('resolved_ips', 'N/A'), 
-                            'CNAMEs': d.get('cnames', 'N/A'), 
-                            'Catchall': d.get('is_catchall', 'unknown')} for d in result.data]
-                
-            elif type_name == 'ips':
-                if resolved:
-                    result = await self.api.get_reverse_resolved_ips(program)
-                elif unresolved:
-                    result = await self.api.get_not_reverse_resolved_ips(program)
-                else:
-                    result = await self.api.get_ips(program)
-                return [{'IP': ip['ip'], 
-                        'PTR': ip.get('ptr', 'N/A'), 
-                        'Cloud Provider': ip.get('cloud_provider', 'unknown')} for ip in result.data]
-                
-            elif type_name == 'websites':
+            if type_name == "domains":
+                result = await self.api.get_domains(program, resolved, unresolved)
+            elif type_name == "ips":
+                result = await self.api.get_ips(program, resolved, unresolved)
+            elif type_name == "websites":
                 result = await self.api.get_websites(program)
-                return [{'URL': website['url'], 
-                        'Host': website.get('host', 'N/A'), 
-                        'Port': website.get('port', 'N/A'), 
-                        'Scheme': website.get('scheme', 'N/A'), 
-                        'Techs': website.get('techs', 'N/A')} for website in result.data]
-            elif type_name == 'websites_paths':
+            elif type_name == "websites_paths":
                 result = await self.api.get_websites_paths(program)
-                return [{'URL': website.get('url', 'N/A'), 
-                        'Path': website.get('path', 'N/A'), 
-                        'Final Path': website.get('final_path', 'N/A'), 
-                        'Status Code': website.get('status_code', 'N/A'), 
-                        'Content Type': website.get('content_type', 'N/A')} for website in result.data]
-            elif type_name == 'services':
+            elif type_name == "services":
                 result = await self.api.get_services(program)
-                return [{
-                    'IP': service['ip'],
-                    'Port': service.get('port', 'N/A'),
-                    'Service': service.get('service', 'unknown'),
-                    'Protocol': service.get('protocol', 'N/A'),
-                    'Resolved Hostname': service.get('ptr', 'unknown')
-                } for service in result.data]
-                
-            elif type_name == 'nuclei':
-                result = await self.api.get_nuclei(program, severity=severity)
-                return [{
-                    'Target': finding['url'],
-                    'Template': finding.get('template_id', 'unknown'),
-                    'Severity': finding.get('severity', 'unknown'),
-                    'Matcher Name': finding.get('name', 'N/A')
-                } for finding in result.data]
-                
-            elif type_name == 'certificates':
+            elif type_name == "nuclei":
+                result = await self.api.get_nuclei(program, severity)
+            elif type_name == "certificates":
                 result = await self.api.get_certificates(program)
-                return [{
-                    'Subject CN': cert.get('subject_cn', 'unknown'),
-                    'Issuer': cert.get('issuer', 'unknown'),
-                    'Valid Until': cert.get('valid_until', 'unknown')
-                } for cert in result.data]
-            elif type_name == 'screenshots':
-                result = await self.api.get_screenshots(program)
-                return [{
-                    'URL': screenshot.get('url', 'unknown'),
-                    'Filepath': screenshot.get('filepath', 'unknown'),
-                    'MD5 Hash': screenshot.get('md5_hash', 'unknown')
-                } for screenshot in result.data]
+            else:
+                self.console.print(f"[red]Invalid type: {type_name}[/]")
+                return
+
+            if not result.success:
+                self.console.print(f"[red]Error: {result.error}[/]")
+                return
+
+            # Apply filter if specified
+            data = result.data
+            if filter and type_name == "websites":
+                filter_key, filter_value = filter.split(":", 1)
+                if filter_key == "tech":
+                    data = [item for item in data if any(tech.lower().find(filter_value.lower()) != -1 for tech in (item.get("techs", []) or []))]
+
+            self.display_list_results(type_name, data)
 
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
-            return []
 
-    async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
-        """Handle show commands."""
-        items = await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
-        if items:
-            self.display_table_results(items)
+    async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None, filter=None):
+        """Handle show commands"""
+        try:
+            if type_name == "domains":
+                result = await self.api.get_domains(program, resolved, unresolved)
+            elif type_name == "ips":
+                result = await self.api.get_ips(program, resolved, unresolved)
+            elif type_name == "websites":
+                result = await self.api.get_websites(program)
+            elif type_name == "websites_paths":
+                result = await self.api.get_websites_paths(program)
+            elif type_name == "services":
+                result = await self.api.get_services(program)
+            elif type_name == "nuclei":
+                result = await self.api.get_nuclei(program, severity)
+            elif type_name == "certificates":
+                result = await self.api.get_certificates(program)
+            else:
+                self.console.print(f"[red]Invalid type: {type_name}[/]")
+                return
+
+            if not result.success:
+                self.console.print(f"[red]Error: {result.error}[/]")
+                return
+
+            # Apply filter if specified
+            data = result.data
+            if filter and type_name == "websites":
+                filter_key, filter_value = filter.split(":", 1)
+                if filter_key == "tech":
+                    data = [item for item in data if any(tech.lower().find(filter_value.lower()) != -1 for tech in (item.get("techs", []) or []))]
+
+            self.display_table_results(data)
+
+        except Exception as e:
+            self.console.print(f"[red]Error: {str(e)}[/]")
 
     async def handle_dns_command(self, program: str, domain: str = None):
         """Handle DNS record display command.
