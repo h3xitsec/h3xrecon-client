@@ -184,40 +184,25 @@ def list_commands(
     resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
     unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
     severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
-    program: Optional[str] = program_option
+    program: Optional[str] = program_option,
+    filter: Optional[str] = filter_option
 ):
-    """List reconnaissance assets"""
+    """List reconnaissance data"""
     program = get_program(program)
     if not program:
-        typer.echo("Error: No program specified. Use -p/--program option.")
+        typer.echo("No program selected. Use -p option or 'program use' command.")
         raise typer.Exit(1)
-        
+
     async def run():
-        items = await handlers.handle_list_commands(type, program, resolved, unresolved, severity)
-        if items:
-            # Get the main identifier for each asset type
-            identifiers = []
-            for item in items:
-                if type == 'domains':
-                    identifiers.append(item['Domain'])  # domain
-                elif type == 'ips':
-                    identifiers.append(item['IP'])  # ip
-                elif type == 'websites':
-                    identifiers.append(item['URL'])  # url
-                elif type == 'websites_paths':
-                    identifiers.append(item['URL'])  # url
-                elif type == 'services':
-                    identifiers.append(f"{item['IP']}:{item['Port']}")  # ip:port
-                elif type == 'nuclei':
-                    identifiers.append(f"{item['Target']} ({item['Severity']})")  # target (severity)
-                elif type == 'certificates':
-                    identifiers.append(item['Subject CN'])  # domain
-                elif type == 'screenshots':
-                    identifiers.append(item['URL'])  # screenshot
-            
-            for identifier in identifiers:
-                typer.echo(identifier)
-                
+        await handlers.handle_list_commands(
+            type,
+            program,
+            resolved=resolved,
+            unresolved=unresolved,
+            severity=severity,
+            filter=filter
+        )
+
     asyncio.run(run())
 
 class CliPaginator:
@@ -336,51 +321,28 @@ def show_commands(
     severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
     domain: str = typer.Option(None, "--domain", "-d", help="Domain to show DNS records for"),
     program: Optional[str] = program_option,
-    no_pager: Optional[bool] = no_pager_option
+    no_pager: Optional[bool] = no_pager_option,
+    filter: Optional[str] = filter_option
 ):
-    """Show reconnaissance assets in table format"""
+    """Show reconnaissance data in table format"""
     program = get_program(program)
     if not program:
-        typer.echo("Error: No program specified. Use -p/--program option.")
+        typer.echo("No program selected. Use -p option or 'program use' command.")
         raise typer.Exit(1)
-        
+
     async def run():
-        if type == 'dns':
+        if type == "dns" and domain:
             await handlers.handle_dns_command(program, domain)
         else:
-            items = await handlers.handle_show_commands(type, program, resolved, unresolved, severity)
-            if items:
-                headers = get_headers_for_type(type)
-                
-                # Simplified logic: if either global or local no_pager is True, disable pagination
-                disable_pager = handlers.no_pager or no_pager
-                
-                if disable_pager:
-                    # Display all results without pagination
-                    console = Console()
-                    terminal_width = shutil.get_terminal_size().columns
-                    
-                    # Calculate column widths
-                    col_widths = CliPaginator().calculate_column_widths(headers, items, terminal_width)
-                    
-                    # Print headers
-                    header_row = " | ".join(
-                        f"{h:<{w}}" for h, w in zip(headers, col_widths)
-                    )
-                    console.print(f"[bold]{header_row}[/]")
-                    console.print("-" * min(sum(col_widths) + (len(headers) - 1) * 3, terminal_width))
-                    
-                    # Print items
-                    for item in items:
-                        row = " | ".join(
-                            f"{str(field):<{w}}" for field, w in zip(item, col_widths)
-                        )
-                        console.print(row)
-                else:
-                    # Use pagination
-                    paginator = CliPaginator()
-                    await paginator.paginate(items, headers)
-            
+            await handlers.handle_show_commands(
+                type,
+                program,
+                resolved=resolved,
+                unresolved=unresolved,
+                severity=severity,
+                filter=filter
+            )
+
     asyncio.run(run())
 
 def get_headers_for_type(type_name):
