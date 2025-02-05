@@ -8,6 +8,7 @@ import shutil
 import json
 import os
 import shlex
+from typing import Optional
 
 __all__ = ['H3xReconConsole']
 
@@ -16,7 +17,6 @@ class H3xReconConsole(CommandHandlers):
         super().__init__()
         self.session = PromptSession()
         self.running = True
-        self.current_program = None  # Initialize to None
         self.config_file = os.path.expanduser('~/.h3xrecon/config.json')
         
         # Define command completions
@@ -216,17 +216,23 @@ class H3xReconConsole(CommandHandlers):
             self.console.print(f"[yellow]Warning: Could not load active program: {str(e)}[/]")
             self.current_program = None
 
-    async def validate_active_program(self):
-        """Validate that the loaded program exists"""
-        if self.current_program:
-            try:
-                programs = await self.api.get_programs()
-                if not any(p.get("name") == self.current_program for p in programs.data):
-                    self.console.print(f"[yellow]Warning: Saved program '{self.current_program}' no longer exists[/]")
-                    self.current_program = None
-            except Exception as e:
-                self.console.print(f"[yellow]Warning: Could not validate program: {str(e)}[/]")
-                self.current_program = None
+    async def validate_active_program(self) -> bool:
+        """Validate that a program is selected and exists"""
+        if not self.current_program:
+            self.console.print("[red]No program selected. Use 'use <program>' first[/red]")
+            return False
+
+        try:
+            programs = await self.api.get_programs()
+            if not any(p.get("name") == self.current_program for p in programs.data):
+                self.console.print(f"[red]Program '{self.current_program}' not found[/red]")
+                self.current_program = None  # Reset invalid program
+                self.save_active_program()
+                return False
+            return True
+        except Exception as e:
+            self.console.print(f"[red]Error validating program: {str(e)}[/red]")
+            return False
 
     async def next_page(self, event=None):
         """Go to next page"""
@@ -482,134 +488,128 @@ class H3xReconConsole(CommandHandlers):
         return headers_map.get(type_name, None)
 
     async def handle_command(self, command: str) -> None:
-        """Handle console commands"""
+        """Handle a console command"""
         if not command:
             return
 
-        # Split command while preserving quoted strings
         try:
-            parts = shlex.split(command)
-        except ValueError as e:
-            self.console.print(f"[red]Error parsing command: {str(e)}[/]")
-            return
+            # Split command into parts while preserving quoted strings
+            args = shlex.split(command)
+            cmd = args[0].lower()
 
-        cmd = parts[0].lower()
+            if cmd == 'help':
+                self.show_help()
+                return
 
-        if cmd == 'use' and len(parts) > 1:
-            programs = await self.api.get_programs()
-            program_name = parts[1]
-            if any(p.get("name") == program_name for p in programs.data):
-                self.current_program = program_name
-                self.save_active_program()  # Save to config when program changes
-                self.console.print(f"[green]Using program: {program_name}[/]")
-            else:
-                self.console.print(f"[red]Program '{program_name}' not found[/]")
-        
-        elif cmd == 'exit':
-            self.running = False
-            
-        elif cmd == 'help':
-            self.show_help()
-            
-        elif cmd == 'program' and len(parts) > 1:
-            await self.handle_program_commands(parts[1], parts[2:])
-            
-        elif cmd == 'system' and len(parts) > 2:
-            if parts[1] == 'queue' and len(parts) > 3:
-                await self.handle_system_commands_with_3_args(parts[1], parts[2], parts[3])
-            else:
-                await self.handle_system_commands_with_2_args(parts[1], parts[2])
-            
-        elif cmd == 'worker' and len(parts) > 1:
-            await self.handle_worker_commands(parts[1], parts[2] if len(parts) > 2 else None)
-            
-        elif cmd == 'config' and len(parts) > 2:
-            if not self.current_program:
-                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
-                return
-            value = parts[3] if len(parts) > 3 else None
-            await self.handle_config_commands(parts[1], parts[2], self.current_program, value)
-            
-        elif cmd in ['list', 'show'] and len(parts) > 1:
-            if not self.current_program:
-                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
-                return
-                
-            type_name = parts[1]
-            resolved = '--resolved' in parts
-            unresolved = '--unresolved' in parts
-            severity = None
-            if '--severity' in parts:
-                try:
-                    severity_idx = parts.index('--severity')
-                    severity = parts[severity_idx + 1]
-                except (ValueError, IndexError):
-                    self.console.print("[red]Missing severity value[/]")
+            if cmd == 'use':
+                if len(args) != 2:
+                    self.console.print("[red]Error: use command requires a program name[/red]")
                     return
-                    
-            if cmd == 'list':
-                await self.handle_list_commands(type_name, self.current_program, resolved, unresolved, severity)
+                self.current_program = args[1]
+                self.save_active_program()
+                self.console.print(f"[green]Using program: {self.current_program}[/green]")
+                return
+
+            if cmd == 'exit' or cmd == 'quit':
+                self.running = False
+                return
+
+            # For commands that require a program context
+            program_required_commands = {'config', 'add', 'del', 'show', 'list', 'workflow', 'sendjob'}
+            if cmd in program_required_commands and not await self.validate_active_program():
+                return
+
+            if cmd == 'program':
+                if len(args) < 2:
+                    self.console.print("[red]Error: program command requires an action[/red]")
+                    return
+                await self.handle_program_commands(args[1], args[2:] if len(args) > 2 else [])
+
+            elif cmd == 'system':
+                if len(args) < 3:
+                    self.console.print("[red]Error: system command requires at least 2 arguments[/red]")
+                    return
+                if len(args) == 3:
+                    await self.handle_system_commands_with_2_args(args[1], args[2])
+                else:
+                    await self.handle_system_commands_with_3_args(args[1], args[2], args[3])
+
+            elif cmd == 'worker':
+                if len(args) < 3:
+                    self.console.print("[red]Error: worker command requires at least 2 arguments[/red]")
+                    return
+                if len(args) == 3:
+                    await self.handle_worker_commands(args[1], args[2])
+                else:
+                    await self.handle_worker_commands_with_3_args(args[1], args[2], args[3])
+
+            elif cmd == 'config':
+                if len(args) < 3:
+                    self.console.print("[red]Error: config command requires action and type[/red]")
+                    return
+                value = args[3] if len(args) > 3 else None
+                await self.handle_config_commands(args[1], args[2], self.current_program, value)
+
+            elif cmd == 'show':
+                if len(args) < 2:
+                    self.console.print("[red]Error: show command requires a type[/red]")
+                    return
+                await self.handle_show_commands(args[1], self.current_program)
+
+            elif cmd == 'list':
+                if len(args) < 2:
+                    self.console.print("[red]Error: list command requires a type[/red]")
+                    return
+                await self.handle_list_commands(args[1], self.current_program)
+
+            elif cmd == 'add':
+                if len(args) < 3:
+                    self.console.print("[red]Error: add command requires type and item[/red]")
+                    return
+                items = [args[2]]
+                if '--stdin' in args:
+                    items = []
+                    for line in sys.stdin:
+                        line = line.strip()
+                        if line:
+                            items.append(line)
+                await self.handle_add_commands(args[1], self.current_program, items)
+
+            elif cmd == 'workflow':
+                if len(args) < 3:
+                    self.console.print("[red]Error: workflow command requires name and target[/red]")
+                    return
+                targets = [args[2]]
+                if args[2] == '-':
+                    targets = []
+                    for line in sys.stdin:
+                        line = line.strip()
+                        if line:
+                            targets.append(line)
+                await self.handle_workflow_command(args[1], self.current_program, targets)
+
+            elif cmd == 'sendjob':
+                if len(args) < 3:
+                    self.console.print("[red]Error: sendjob command requires function name and target[/red]")
+                    return
+                params = args[3:] if len(args) > 3 else []
+                await self.handle_sendjob_command(
+                    function_name=args[1],
+                    target=args[2],
+                    params=params,
+                    program=self.current_program
+                )
+
             else:
-                await self.handle_show_commands(type_name, self.current_program, resolved, unresolved, severity)
-                
-        elif cmd == 'sendjob' and len(parts) > 2:
-            if not self.current_program:
-                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
-                return
-                
-            function_name = parts[1]
-            target = parts[2]
-            force = '--force' in parts
-            params = [p for p in parts[3:] if p != '--force']
-            mode = None
-            if '--mode' in parts:
-                mode_idx = parts.index('--mode')
-                mode = parts[mode_idx + 1]
-            await self.handle_sendjob_command(function_name, target, self.current_program, force, params, mode)
-            
-        elif cmd == 'add' and len(parts) > 2:
-            if not self.current_program:
-                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
-                return
-                
-            type_name = parts[1]
-            items = []
-            
-            if '--stdin' in parts:
-                # Read from stdin
-                import sys
-                for line in sys.stdin:
-                    line = line.strip()
-                    if line:  # Skip empty lines
-                        items.append(line)
+                self.console.print(f"[red]Unknown command: {cmd}[/red]")
+
+        except Exception as e:
+            if self.debug:
+                import traceback
+                self.console.print(f"[red]Error: {str(e)}[/red]")
+                self.console.print(traceback.format_exc())
             else:
-                items = [parts[2]]
-                
-            if type_name not in ['domain', 'ip', 'url']:
-                self.console.print(f"[red]Invalid type '{type_name}'. Must be one of: domain, ip, url[/]")
-                return
-                
-            await self.handle_add_commands(type_name, self.current_program, items)
-            
-        elif cmd == 'del' and len(parts) > 2:
-            if not self.current_program:
-                self.console.print("[red]No program selected. Use 'use <program>' first[/]")
-                return
-                
-            type_name = parts[1]
-            item = parts[2]
-            if type_name not in ['domain', 'ip', 'url']:
-                self.console.print(f"[red]Invalid type '{type_name}'. Must be one of: domain, ip, url[/]")
-                return
-                
-            result = await self.api.remove_item(type_name, self.current_program, item)
-            if result:
-                self.console.print(f"[green]Successfully removed {type_name} '{item}' from program '{self.current_program}'[/]")
-            else:
-                self.console.print(f"[red]Failed to remove {type_name} '{item}'[/]")
-            
-        else:
-            self.console.print(f"[red]Unknown command or missing arguments: {command}[/]")
+                self.console.print(f"[red]Error: {str(e)}[/red]")
 
     async def run(self) -> None:
         """Run the interactive console"""
