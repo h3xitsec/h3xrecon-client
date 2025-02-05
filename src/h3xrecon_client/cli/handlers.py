@@ -3,18 +3,68 @@ from rich.table import Table
 from ..api import ClientAPI
 from ..config import ClientConfig
 from ..queue import ClientQueue, StreamLockedException
+from .options import GlobalOptions
 from typing import Optional, List, Dict, Any
 import yaml
 import uuid
 import typer
 
 class CommandHandlers:
-    def __init__(self):
+    def __init__(self, options: GlobalOptions = None):
         self.console = Console()
         self.api = ClientAPI()
-        self.current_program = None
         self.client_queue = ClientQueue()
-        self.no_pager = False
+        self.options = options or GlobalOptions()
+
+    @property
+    def current_program(self) -> Optional[str]:
+        """Get the current program"""
+        return self.options.program
+
+    @current_program.setter
+    def current_program(self, value: Optional[str]) -> None:
+        """Set the current program"""
+        self.options.program = value
+
+    @property
+    def no_pager(self) -> bool:
+        return self.options.no_pager
+
+    @property
+    def wordlist(self) -> Optional[str]:
+        return self.options.wordlist
+
+    @property
+    def wildcard_scope(self) -> bool:
+        return self.options.wildcard
+
+    @property
+    def regex_scope(self) -> Optional[str]:
+        return self.options.regex
+
+    @property
+    def no_trigger(self) -> bool:
+        return self.options.no_trigger
+
+    @property
+    def timeout(self) -> int:
+        return self.options.timeout
+
+    @property
+    def mode(self) -> Optional[str]:
+        return self.options.mode
+
+    @property
+    def filter(self) -> Optional[str]:
+        return self.options.filter
+
+    @property
+    def wait_ack(self) -> bool:
+        return self.options.wait_ack
+
+    @property
+    def debug(self) -> bool:
+        return self.options.debug
 
     def show_help(self) -> None:
         """Show help information"""
@@ -260,16 +310,16 @@ class CommandHandlers:
         except Exception as e:
             self.console.print(f"[red]Error: {str(e)}[/]")
 
-    async def handle_list_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
+    async def handle_list_commands(self, type_name, program, resolved=False, unresolved=False, severity=None, filter=None):
         """Handle list commands"""
         try:
             if type_name == 'domains':
                 if resolved:
-                    result = await self.api.get_resolved_domains(program)
+                    result = await self.api.get_resolved_domains(program, filter)
                 elif unresolved:
-                    result = await self.api.get_unresolved_domains(program)
+                    result = await self.api.get_unresolved_domains(program, filter)
                 else:
-                    result = await self.api.get_domains(program)
+                    result = await self.api.get_domains(program, filter)
                 if result.success:
                     return [{'Domain': d['domain'], 
                             'IPs': d.get('resolved_ips', 'N/A'), 
@@ -339,9 +389,16 @@ class CommandHandlers:
             self.console.print(f"[red]Error: {str(e)}[/]")
             return []
 
-    async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None):
+    async def handle_show_commands(self, type_name, program, resolved=False, unresolved=False, severity=None, filter=None):
         """Handle show commands."""
-        items = await self.handle_list_commands(type_name, program, resolved, unresolved, severity)
+        items = await self.handle_list_commands(
+            type_name=type_name,
+            program=program,
+            resolved=resolved,
+            unresolved=unresolved,
+            severity=severity,
+            filter=filter
+        )
         if items:
             self.display_table_results(items)
 
