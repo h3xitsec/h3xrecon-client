@@ -777,17 +777,7 @@ class ClientAPI:
             JOIN programs p ON d.program_id = p.id
             GROUP BY d.domain, d.cnames, d.is_catchall, p.name"""
 
-            # Debug log the final query and parameters
-            logger.debug(f"Executing query: {base_query}")
-            logger.debug(f"With parameters: {params}")
-
             result = await self.db._fetch_records(base_query, *params)
-            
-            # Debug log the result
-            if not result.success:
-                logger.error(f"Query failed: {result.error}")
-            else:
-                logger.debug(f"Query returned {len(result.data)} results")
             
             return result
         except Exception as e:

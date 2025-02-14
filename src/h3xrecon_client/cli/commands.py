@@ -11,7 +11,6 @@ import shutil
 import math
 import sys
 import uuid
-from .command_options import ShowCommandOptions, ConfigCommandOptions, JobCommandOptions, SystemCommandOptions
 
 app = typer.Typer(
     name="h3xrecon",
@@ -24,6 +23,36 @@ app.global_options = GlobalOptions()
 
 # Get all global options
 global_options = GlobalOptions.get_options()
+
+# Command options
+show_options = {
+    "resolved": typer.Option(False, "--resolved", help="Show only resolved items"),
+    "unresolved": typer.Option(False, "--unresolved", help="Show only unresolved items"),
+    "severity": typer.Option(None, "--severity", help="Severity for nuclei findings"),
+    "domain": typer.Option(None, "--domain", "-d", help="Domain to show DNS records for"),
+    "filter": typer.Option(None, "--filter", "-f", help="Filter show command output")
+}
+
+config_options = {
+    "wildcard": typer.Option(False, "--wildcard", help="Use wildcard for domain scope"),
+    "regex": typer.Option(None, "--regex", help="Use regex for domain scope")
+}
+
+job_options = {
+    "wordlist": typer.Option(None, "--wordlist", help="Wordlist to use for functions that need it"),
+    "mode": typer.Option(None, "--mode", help="Plugin run mode"),
+    "no_trigger": typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
+    "wait_ack": typer.Option(False, "--wait-ack", "-w", help="Wait for job request response"),
+    "force": typer.Option(False, "--force", help="Force job execution")
+}
+
+system_options = {
+    "filter": typer.Option(None, "--filter", "-f", help="Filter system command output")
+}
+
+add_options = {
+    "no_trigger": typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
+}
 
 @app.callback()
 def main(
@@ -61,7 +90,7 @@ def program_commands(
 @app.command("system")
 def system_commands(
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
-    filter: Optional[str] = SystemCommandOptions.get_options()["filter"]
+    filter: Optional[str] = system_options["filter"]
 ):
     """
     System management commands
@@ -127,39 +156,29 @@ def config_commands(
     action: str = typer.Argument(..., help="Action: add, del, list"),
     type: str = typer.Argument(..., help="Type: cidr, scope"),
     value: Optional[str] = typer.Argument(None, help="Value for add/del actions"),
-    wildcard: bool = ConfigCommandOptions.get_options()["wildcard"],
-    regex: Optional[str] = ConfigCommandOptions.get_options()["regex"]
+    wildcard: bool = config_options["wildcard"],
+    regex: Optional[str] = config_options["regex"]
 ):
     """Configuration commands"""
     handlers = get_handlers()
     opts = app.global_options
-    cmd_opts = ConfigCommandOptions(
-        wildcard=wildcard,
-        regex=regex
-    )
     
     if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
-    asyncio.run(handlers.handle_config_commands(action, type, opts.program, value, cmd_opts.wildcard, cmd_opts.regex))
+    asyncio.run(handlers.handle_config_commands(action, type, opts.program, value, wildcard, regex))
 
 @app.command("list")
 def list_commands(
     type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates"),
-    resolved: bool = ShowCommandOptions.get_options()["resolved"],
-    unresolved: bool = ShowCommandOptions.get_options()["unresolved"],
-    severity: Optional[str] = ShowCommandOptions.get_options()["severity"],
-    filter: Optional[str] = ShowCommandOptions.get_options()["filter"]
+    resolved: bool = show_options["resolved"],
+    unresolved: bool = show_options["unresolved"],
+    severity: Optional[str] = show_options["severity"],
+    filter: Optional[str] = show_options["filter"]
 ):
     """List reconnaissance assets"""
     handlers = get_handlers()
     opts = app.global_options
-    cmd_opts = ShowCommandOptions(
-        resolved=resolved,
-        unresolved=unresolved,
-        severity=severity,
-        filter=filter
-    )
     
     if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
@@ -169,10 +188,10 @@ def list_commands(
         items = await handlers.handle_list_commands(
             type, 
             opts.program, 
-            cmd_opts.resolved, 
-            cmd_opts.unresolved, 
-            cmd_opts.severity,
-            cmd_opts.filter
+            resolved, 
+            unresolved, 
+            severity,
+            filter
         )
         if items:
             # Get the main identifier for each asset type
@@ -312,22 +331,15 @@ class CliPaginator:
 @app.command("show")
 def show_commands(
     type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates, screenshots, dns"),
-    resolved: bool = ShowCommandOptions.get_options()["resolved"],
-    unresolved: bool = ShowCommandOptions.get_options()["unresolved"],
-    severity: Optional[str] = ShowCommandOptions.get_options()["severity"],
-    domain: Optional[str] = ShowCommandOptions.get_options()["domain"],
-    filter: Optional[str] = ShowCommandOptions.get_options()["filter"]
+    resolved: bool = show_options["resolved"],
+    unresolved: bool = show_options["unresolved"],
+    severity: Optional[str] = show_options["severity"],
+    domain: Optional[str] = show_options["domain"],
+    filter: Optional[str] = show_options["filter"]
 ):
     """Show reconnaissance assets in table format"""
     handlers = get_handlers()
     opts = app.global_options
-    cmd_opts = ShowCommandOptions(
-        resolved=resolved,
-        unresolved=unresolved,
-        severity=severity,
-        domain=domain,
-        filter=filter
-    )
     
     if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
@@ -335,15 +347,15 @@ def show_commands(
         
     async def run():
         if type == 'dns':
-            await handlers.handle_dns_command(opts.program, cmd_opts.domain)
+            await handlers.handle_dns_command(opts.program, domain)
         else:
             items = await handlers.handle_show_commands(
                 type_name=type,
                 program=opts.program,
-                resolved=cmd_opts.resolved,
-                unresolved=cmd_opts.unresolved,
-                severity=cmd_opts.severity,
-                filter=cmd_opts.filter
+                resolved=resolved,
+                unresolved=unresolved,
+                severity=severity,
+                filter=filter
             )
             if items:
                 headers = get_headers_for_type(type)
@@ -393,22 +405,15 @@ def get_headers_for_type(type_name):
 def workflow_commands(
     name: str = typer.Argument(..., help="workflow function to execute (e.g., dns_resolve)"),
     target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
-    wordlist: Optional[str] = JobCommandOptions.get_options()["wordlist"],
-    mode: Optional[str] = JobCommandOptions.get_options()["mode"],
-    no_trigger: bool = JobCommandOptions.get_options()["no_trigger"],
-    wait_ack: bool = JobCommandOptions.get_options()["wait_ack"],
-    force: bool = JobCommandOptions.get_options()["force"]
+    wordlist: Optional[str] = job_options["wordlist"],
+    mode: Optional[str] = job_options["mode"],
+    no_trigger: bool = job_options["no_trigger"],
+    wait_ack: bool = job_options["wait_ack"],
+    force: bool = job_options["force"]
 ):
     """Execute workflow functions (combined functions) on targets"""
     handlers = get_handlers()
     opts = app.global_options
-    cmd_opts = JobCommandOptions(
-        wordlist=wordlist,
-        mode=mode,
-        no_trigger=no_trigger,
-        wait_ack=wait_ack,
-        force=force
-    )
     
     if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
@@ -427,29 +432,22 @@ def workflow_commands(
     else:
         targets = [target]
 
-    asyncio.run(handlers.handle_workflow_command(name, opts.program, targets, cmd_opts.force))
+    asyncio.run(handlers.handle_workflow_command(name, opts.program, targets, force))
 
 @app.command("sendjob")
 def sendjob_command(
     function_name: str = typer.Argument(..., help="Function to execute"),
     target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
-    wordlist: Optional[str] = JobCommandOptions.get_options()["wordlist"],
-    mode: Optional[str] = JobCommandOptions.get_options()["mode"],
-    no_trigger: bool = JobCommandOptions.get_options()["no_trigger"],
-    wait_ack: bool = JobCommandOptions.get_options()["wait_ack"],
-    force: bool = JobCommandOptions.get_options()["force"]
+    wordlist: Optional[str] = job_options["wordlist"],
+    mode: Optional[str] = job_options["mode"],
+    no_trigger: bool = job_options["no_trigger"],
+    wait_ack: bool = job_options["wait_ack"],
+    force: bool = job_options["force"]
 ):
     """Send job to worker"""
     handlers = get_handlers()
     opts = app.global_options
-    cmd_opts = JobCommandOptions(
-        wordlist=wordlist,
-        mode=mode,
-        no_trigger=no_trigger,
-        wait_ack=wait_ack,
-        force=force
-    )
     
     if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
@@ -468,23 +466,23 @@ def sendjob_command(
     else:
         targets = [target]
 
-    response_id = str(uuid.uuid4()) if cmd_opts.wait_ack else None
+    response_id = str(uuid.uuid4()) if wait_ack else None
     debug_id = str(uuid.uuid4()) if opts.debug else None
     
     job_params = {
         "function_name": function_name,
         "targets": targets,
         "program": opts.program,
-        "force": cmd_opts.force,
+        "force": force,
         "params": params or {},
-        "wordlist": cmd_opts.wordlist,
-        "no_trigger": cmd_opts.no_trigger,
+        "wordlist": wordlist,
+        "no_trigger": no_trigger,
         "timeout": opts.timeout,
         "response_id": response_id,
         "debug_id": debug_id
     }
-    if cmd_opts.mode:
-        job_params["mode"] = cmd_opts.mode
+    if mode:
+        job_params["mode"] = mode
     asyncio.run(handlers.handle_sendjob_command(**job_params))
 
 @app.command("console")
@@ -498,7 +496,8 @@ def console_mode():
 def add_commands(
     type: str = typer.Argument(..., help="Type: domain, ip, website, website_path"),
     item: str = typer.Argument(..., help="Item to add"),
-    stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin")
+    stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin"),
+    no_trigger: bool = add_options["no_trigger"]
 ):
     """Add reconnaissance assets"""
     handlers = get_handlers()
@@ -517,7 +516,7 @@ def add_commands(
     else:
         items = [item]
 
-    asyncio.run(handlers.handle_add_commands(type, opts.program, items, opts.no_trigger))
+    asyncio.run(handlers.handle_add_commands(type, opts.program, items, no_trigger))
 
 if __name__ == "__main__":
     app()

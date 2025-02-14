@@ -315,9 +315,9 @@ class CommandHandlers:
         try:
             if type_name == 'domains':
                 if resolved:
-                    result = await self.api.get_resolved_domains(program, filter)
+                    result = await self.api.get_resolved_domains(program)
                 elif unresolved:
-                    result = await self.api.get_unresolved_domains(program, filter)
+                    result = await self.api.get_unresolved_domains(program)
                 else:
                     result = await self.api.get_domains(program, filter)
                 if result.success:
