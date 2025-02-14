@@ -663,35 +663,126 @@ class ClientAPI:
             result = await self.db._fetch_records(query)
         return result
 
-    async def get_domains(self, program_name: str = None):
+    async def get_domains(self, program_name: str = None, filter: str = None):
         """
-        Retrieve domains for a specific program or all programs.
-        """
-        query = """
-        SELECT 
-            d.domain,
-            array_agg(i.ip) as resolved_ips,
-            d.cnames,
-            d.is_catchall,
-            p.name as program
-        FROM domains d
-        LEFT JOIN ips i ON i.id = ANY(d.ips)
-        JOIN programs p ON d.program_id = p.id
+        Retrieve domains for a specific program or all programs, with optional filtering.
+        
+        Args:
+            program_name (str, optional): The name of the program to retrieve domains for.
+            filter (str, optional): Filter string in format "column.operator:value" where operator can be:
+                                  - eq: Exact match (=)
+                                  - ne: Not equal (!=)
+                                  - cont: Contains (LIKE)
+                                  - ncont: Not contains (NOT LIKE)
+                                  Examples:
+                                  - domain.eq:"prod.fulldomain.com" (exact match)
+                                  - domain.cont:"prod" (contains)
+                                  - domain.ncont:"prod" (not contains)
+                                  - domain.ne:"prod.fulldomain.com" (not equal)
+                                  - is_catchall.eq:"true" (boolean exact match)
+                                  - ip.eq:"1.2.3.4" (domains with exact IP)
+                                  - ip.cont:"1.2" (domains with IPs containing pattern)
+                                  - ip.ncont:"1.2" (domains with IPs not containing pattern)
+        
+        Returns:
+            DbResult: Result containing the domains data
         """
         try:
+            base_query = """
+            WITH filtered_domains AS (
+                SELECT DISTINCT d.id
+                FROM domains d
+                LEFT JOIN ips i ON i.id = ANY(d.ips)
+                JOIN programs p ON d.program_id = p.id
+                WHERE 1=1
+            """
+            
+            conditions = []
+            params = []
+            param_count = 1
+
             if program_name:
-                query += """
-                WHERE p.name = $1
-                """
-                query += " GROUP BY d.domain, d.cnames, d.is_catchall, p.name"
-                result = await self.db._fetch_records(query, program_name)
-            else:
-                query += " GROUP BY d.domain, d.cnames, d.is_catchall, p.name"
-                result = await self.db._fetch_records(query)
+                conditions.append(f"p.name = ${param_count}")
+                params.append(program_name)
+                param_count += 1
+
+            if filter:
+                try:
+                    # Split into column.operator and value
+                    field_part, value = filter.split(':', 1)
+                    
+                    # Handle quoted values
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]  # Remove quotes
+                    
+                    # Split field part into column and operator
+                    if '.' not in field_part:
+                        raise ValueError("Filter must include operator (e.g., domain.eq:)")
+                    
+                    column, operator = field_part.split('.')
+                    
+                    # Handle different operators
+                    if column == 'ip':
+                        # Special handling for IP filtering
+                        if operator == 'eq':
+                            conditions.append(f"i.ip = ${param_count}")
+                        elif operator == 'ne':
+                            conditions.append(f"i.ip != ${param_count} OR i.ip IS NULL")
+                        elif operator == 'cont':
+                            conditions.append(f"i.ip LIKE ${param_count}")
+                            value = f"%{value}%"
+                        elif operator == 'ncont':
+                            conditions.append(f"i.ip NOT LIKE ${param_count} OR i.ip IS NULL")
+                            value = f"%{value}%"
+                        else:
+                            raise ValueError(f"Unknown operator: {operator}")
+                    else:
+                        # Normal column filtering
+                        if operator == 'eq':
+                            if value.lower() in ('true', 'false'):
+                                value = value.lower() == 'true'
+                            conditions.append(f"d.{column} = ${param_count}")
+                        elif operator == 'ne':
+                            if value.lower() in ('true', 'false'):
+                                value = value.lower() == 'true'
+                            conditions.append(f"d.{column} != ${param_count}")
+                        elif operator == 'cont':
+                            conditions.append(f"d.{column} ILIKE ${param_count}")
+                            value = f"%{value}%"
+                        elif operator == 'ncont':
+                            conditions.append(f"d.{column} NOT ILIKE ${param_count}")
+                            value = f"%{value}%"
+                        else:
+                            raise ValueError(f"Unknown operator: {operator}")
+                    
+                    params.append(value)
+                    param_count += 1
+                except ValueError as e:
+                    logger.error(f"Invalid filter format: {str(e)}. Expected format: column.operator:\"value\"")
+                    return DbResult(success=False, error=str(e))
+
+            if conditions:
+                base_query += " AND " + " AND ".join(conditions)
+            
+            base_query += """)
+            SELECT 
+                d.domain,
+                array_remove(array_agg(i.ip), NULL) as resolved_ips,
+                d.cnames,
+                d.is_catchall,
+                p.name as program
+            FROM filtered_domains fd
+            JOIN domains d ON d.id = fd.id
+            LEFT JOIN ips i ON i.id = ANY(d.ips)
+            JOIN programs p ON d.program_id = p.id
+            GROUP BY d.domain, d.cnames, d.is_catchall, p.name"""
+
+            result = await self.db._fetch_records(base_query, *params)
+            
             return result
         except Exception as e:
             logger.exception(e)
-            return []
+            return DbResult(success=False, error=str(e))
     
     async def get_screenshots(self, program_name: str = None):
         """

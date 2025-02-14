@@ -1,6 +1,7 @@
 import typer
 from typing import Optional, List
 from .handlers import CommandHandlers
+from .options import GlobalOptions
 import asyncio
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
@@ -17,75 +18,65 @@ app = typer.Typer(
     add_completion=True,
 )
 
-handlers = CommandHandlers()
+# Initialize global options
+app.global_options = GlobalOptions()
 
-# Add program option to the main app
-program_option = typer.Option(None, "--program", "-p", help="Program to work on")
+# Get all global options
+global_options = GlobalOptions.get_options()
 
-# Add no_pager to the global options at the top
-no_pager_option = typer.Option(False, "--no-pager", help="Disable pagination and show all results at once")
+# Command options
+show_options = {
+    "resolved": typer.Option(False, "--resolved", help="Show only resolved items"),
+    "unresolved": typer.Option(False, "--unresolved", help="Show only unresolved items"),
+    "severity": typer.Option(None, "--severity", help="Severity for nuclei findings"),
+    "domain": typer.Option(None, "--domain", "-d", help="Domain to show DNS records for"),
+    "filter": typer.Option(None, "--filter", "-f", help="Filter show command output")
+}
 
-## Add wordlist option to the global options at the top
-wordlist_option = typer.Option(None, "--wordlist", help="Wordlist to use for web_fuzz")
+config_options = {
+    "wildcard": typer.Option(False, "--wildcard", help="Use wildcard for domain scope"),
+    "regex": typer.Option(None, "--regex", help="Use regex for domain scope")
+}
 
-# Add options for scope management
-wildcard_option = typer.Option(False, "--wildcard", help="Use wildcard for domain scope")
-regex_option = typer.Option(None, "--regex", help="Use regex for domain scope")
+job_options = {
+    "wordlist": typer.Option(None, "--wordlist", help="Wordlist to use for functions that need it"),
+    "mode": typer.Option(None, "--mode", help="Plugin run mode"),
+    "no_trigger": typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
+    "wait_ack": typer.Option(False, "--wait-ack", "-w", help="Wait for job request response"),
+    "force": typer.Option(False, "--force", help="Force job execution")
+}
 
-# Add timeout option to the global options at the top
-timeout_option = typer.Option(300, "--timeout", help="Timeout for job execution in seconds")
+system_options = {
+    "filter": typer.Option(None, "--filter", "-f", help="Filter system command output")
+}
 
-# Add trigger_new_jobs option to the global options at the top
-no_trigger_option = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
-
-# Add mode option to the global options at the top
-mode_option = typer.Option(None, "--mode", help="Plugin run mode")
-
-# Add a filter option to the global options at the top
-filter_option = typer.Option(None, "--filter", "-f", help="Filter")
-
-# Add a ack option to the global options at the top
-wait_ack_option = typer.Option(False, "--wait-ack", "-w", help="Wait for job request response")
-
-# Add a debug option to the global options at the top
-debug_option = typer.Option(False, "--debug", "-d", help="Debug mode")
+add_options = {
+    "no_trigger": typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing")
+}
 
 @app.callback()
 def main(
-    program: Optional[str] = program_option,
-    no_pager: bool = no_pager_option,
-    wordlist: Optional[str] = wordlist_option,
-    wildcard: bool = wildcard_option,
-    regex: Optional[str] = regex_option,
-    no_trigger: bool = no_trigger_option,
-    timeout: int = timeout_option,
-    mode: Optional[str] = mode_option,
-    filter: Optional[str] = filter_option,
-    wait_ack: bool = wait_ack_option,
-    debug: bool = debug_option,
+    program: Optional[str] = global_options["program"],
+    no_pager: bool = global_options["no_pager"],
+    quiet: bool = global_options["quiet"],
+    timeout: int = global_options["timeout"],
+    debug: bool = global_options["debug"],
 ):
     """
     H3xRecon - Advanced Reconnaissance Framework Client
     """
-    if program:
-        handlers.current_program = program
-    handlers.no_pager = no_pager
-    if wordlist:
-        handlers.wordlist = wordlist
-    if wildcard:
-        handlers.wildcard_scope = wildcard
-    if regex:
-        handlers.regex_scope = regex
-    handlers.no_trigger = no_trigger
-    handlers.timeout = timeout
-    handlers.mode = mode
-    handlers.filter = filter
-    handlers.wait_ack = wait_ack
-    handlers.debug = debug
-    
-def get_program(cmd_program: Optional[str]) -> Optional[str]:
-    """Get program from command option or global option"""
-    return cmd_program or handlers.current_program
+    # Update global options with provided values
+    app.global_options.update(
+        program=program,
+        no_pager=no_pager,
+        quiet=quiet,
+        timeout=timeout,
+        debug=debug
+    )
+
+def get_handlers() -> CommandHandlers:
+    """Get command handlers with current global options"""
+    return CommandHandlers(app.global_options)
 
 @app.command("program")
 def program_commands(
@@ -93,14 +84,13 @@ def program_commands(
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments")
 ):
     """Manage reconnaissance programs"""
+    handlers = get_handlers()
     asyncio.run(handlers.handle_program_commands(action, args or []))
-
-
 
 @app.command("system")
 def system_commands(
     args: Optional[List[str]] = typer.Argument(None, help="Additional arguments"),
-    filter: str = typer.Option(None, "--filter", "-f", help="Filter")
+    filter: Optional[str] = system_options["filter"]
 ):
     """
     System management commands
@@ -111,13 +101,13 @@ def system_commands(
     - status: Control system status (flush all/worker/jobprocessor/dataprocessor)
     - database: Manage database (backup/restore path/to/file)
     """
+    handlers = get_handlers()
+    cmd_opts = SystemCommandOptions(filter=filter)
     
     if not args or len(args) < 2:
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
         raise typer.Exit(1)
         
-    print(f"Filter value in system_commands: {filter}")  # Debug print
-    
     if args[0] == 'cache':
         asyncio.run(handlers.handle_system_commands_with_2_args(args[0], args[1]))
         return
@@ -131,8 +121,7 @@ def system_commands(
         if len(args) != 3:
             typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
             raise typer.Exit(1)
-        print(f"Passing filter to handler: {filter}")  # Debug print
-        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2], filter=filter))
+        asyncio.run(handlers.handle_system_commands_with_3_args(args[0], args[1], args[2], filter=cmd_opts.filter))
         return
     else:
         typer.echo("Error: Invalid command. Use 'h3xrecon system --help' for more information.")
@@ -154,8 +143,8 @@ def worker_commands(
     - unpause: Unpause component (worker/jobprocessor/dataprocessor/componentid/all)
     - report: Get component report (componentid)
     """
-    
-    if args[0] in ['killjob', 'pause', 'unpause', 'ping', 'list', 'report','status']:
+    handlers = get_handlers()
+    if args[0] in ['killjob', 'pause', 'unpause', 'ping', 'list', 'report', 'status']:
         asyncio.run(handlers.handle_worker_commands(args[0], args[1]))
         return
     else:
@@ -167,56 +156,67 @@ def config_commands(
     action: str = typer.Argument(..., help="Action: add, del, list"),
     type: str = typer.Argument(..., help="Type: cidr, scope"),
     value: Optional[str] = typer.Argument(None, help="Value for add/del actions"),
-    program: Optional[str] = program_option,
-    wildcard: bool = wildcard_option,
-    regex: Optional[str] = regex_option
+    wildcard: bool = config_options["wildcard"],
+    regex: Optional[str] = config_options["regex"]
 ):
     """Configuration commands"""
-    program = get_program(program)
-    if not program:
+    handlers = get_handlers()
+    opts = app.global_options
+    
+    if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
-    asyncio.run(handlers.handle_config_commands(action, type, program, value, wildcard, regex))
+    asyncio.run(handlers.handle_config_commands(action, type, opts.program, value, wildcard, regex))
 
 @app.command("list")
 def list_commands(
     type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates"),
-    resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
-    unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
-    severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
-    program: Optional[str] = program_option
+    resolved: bool = show_options["resolved"],
+    unresolved: bool = show_options["unresolved"],
+    severity: Optional[str] = show_options["severity"],
+    filter: Optional[str] = show_options["filter"]
 ):
     """List reconnaissance assets"""
-    program = get_program(program)
-    if not program:
+    handlers = get_handlers()
+    opts = app.global_options
+    
+    if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
         
     async def run():
-        items = await handlers.handle_list_commands(type, program, resolved, unresolved, severity)
+        items = await handlers.handle_list_commands(
+            type, 
+            opts.program, 
+            resolved, 
+            unresolved, 
+            severity,
+            filter
+        )
         if items:
             # Get the main identifier for each asset type
             identifiers = []
             for item in items:
                 if type == 'domains':
-                    identifiers.append(item['Domain'])  # domain
+                    identifiers.append(item['Domain'])
                 elif type == 'ips':
-                    identifiers.append(item['IP'])  # ip
+                    identifiers.append(item['IP'])
                 elif type == 'websites':
-                    identifiers.append(item['URL'])  # url
+                    identifiers.append(item['URL'])
                 elif type == 'websites_paths':
-                    identifiers.append(item['URL'])  # url
+                    identifiers.append(item['URL'])
                 elif type == 'services':
-                    identifiers.append(f"{item['IP']}:{item['Port']}")  # ip:port
+                    identifiers.append(f"{item['IP']}:{item['Port']}")
                 elif type == 'nuclei':
-                    identifiers.append(f"{item['Target']} ({item['Severity']})")  # target (severity)
+                    identifiers.append(f"{item['Target']} ({item['Severity']})")
                 elif type == 'certificates':
-                    identifiers.append(item['Subject CN'])  # domain
+                    identifiers.append(item['Subject CN'])
                 elif type == 'screenshots':
-                    identifiers.append(item['URL'])  # screenshot
+                    identifiers.append(item['URL'])
             
             for identifier in identifiers:
-                typer.echo(identifier)
+                if not opts.quiet:
+                    typer.echo(identifier)
                 
     asyncio.run(run())
 
@@ -331,31 +331,35 @@ class CliPaginator:
 @app.command("show")
 def show_commands(
     type: str = typer.Argument(..., help="Type: domains, ips, websites, websites_paths, services, nuclei, certificates, screenshots, dns"),
-    resolved: bool = typer.Option(False, "--resolved", help="Show only resolved items"),
-    unresolved: bool = typer.Option(False, "--unresolved", help="Show only unresolved items"),
-    severity: Optional[str] = typer.Option(None, "--severity", help="Severity for nuclei findings"),
-    domain: str = typer.Option(None, "--domain", "-d", help="Domain to show DNS records for"),
-    program: Optional[str] = program_option,
-    no_pager: Optional[bool] = no_pager_option
+    resolved: bool = show_options["resolved"],
+    unresolved: bool = show_options["unresolved"],
+    severity: Optional[str] = show_options["severity"],
+    domain: Optional[str] = show_options["domain"],
+    filter: Optional[str] = show_options["filter"]
 ):
     """Show reconnaissance assets in table format"""
-    program = get_program(program)
-    if not program:
+    handlers = get_handlers()
+    opts = app.global_options
+    
+    if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
         
     async def run():
         if type == 'dns':
-            await handlers.handle_dns_command(program, domain)
+            await handlers.handle_dns_command(opts.program, domain)
         else:
-            items = await handlers.handle_show_commands(type, program, resolved, unresolved, severity)
+            items = await handlers.handle_show_commands(
+                type_name=type,
+                program=opts.program,
+                resolved=resolved,
+                unresolved=unresolved,
+                severity=severity,
+                filter=filter
+            )
             if items:
                 headers = get_headers_for_type(type)
-                
-                # Simplified logic: if either global or local no_pager is True, disable pagination
-                disable_pager = handlers.no_pager or no_pager
-                
-                if disable_pager:
+                if opts.no_pager:
                     # Display all results without pagination
                     console = Console()
                     terminal_width = shutil.get_terminal_size().columns
@@ -401,12 +405,17 @@ def get_headers_for_type(type_name):
 def workflow_commands(
     name: str = typer.Argument(..., help="workflow function to execute (e.g., dns_resolve)"),
     target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
-    force: bool = typer.Option(False, "--force", help="Force job execution"),
-    program: Optional[str] = program_option
+    wordlist: Optional[str] = job_options["wordlist"],
+    mode: Optional[str] = job_options["mode"],
+    no_trigger: bool = job_options["no_trigger"],
+    wait_ack: bool = job_options["wait_ack"],
+    force: bool = job_options["force"]
 ):
     """Execute workflow functions (combined functions) on targets"""
-    program = get_program(program)
-    if not program:
+    handlers = get_handlers()
+    opts = app.global_options
+    
+    if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
 
@@ -423,25 +432,24 @@ def workflow_commands(
     else:
         targets = [target]
 
-    asyncio.run(handlers.handle_workflow_command(name, program, targets, force))
-    
+    asyncio.run(handlers.handle_workflow_command(name, opts.program, targets, force))
+
 @app.command("sendjob")
 def sendjob_command(
     function_name: str = typer.Argument(..., help="Function to execute"),
     target: str = typer.Argument(..., help="Target for the function (use '-' to read from stdin)"),
-    force: bool = typer.Option(False, "--force", help="Force job execution"),
-    no_trigger: bool = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
     params: Optional[List[str]] = typer.Argument(None, help="Additional parameters"),
-    program: Optional[str] = program_option,
-    wordlist: Optional[str] = wordlist_option,
-    timeout: int = timeout_option,
-    mode: Optional[str] = mode_option,
-    wait_ack: bool = wait_ack_option,
-    debug: bool = debug_option
+    wordlist: Optional[str] = job_options["wordlist"],
+    mode: Optional[str] = job_options["mode"],
+    no_trigger: bool = job_options["no_trigger"],
+    wait_ack: bool = job_options["wait_ack"],
+    force: bool = job_options["force"]
 ):
     """Send job to worker"""
-    program = get_program(program)
-    if not program:
+    handlers = get_handlers()
+    opts = app.global_options
+    
+    if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
 
@@ -449,7 +457,6 @@ def sendjob_command(
     if target == '-':
         targets = []
         for line in sys.stdin:
-            print(line)
             line = line.strip()
             if line:  # Skip empty lines
                 targets.append(line)
@@ -458,24 +465,19 @@ def sendjob_command(
             raise typer.Exit(1)
     else:
         targets = [target]
-    if wait_ack:
-        response_id = str(uuid.uuid4())
-    else:
-        response_id = None
+
+    response_id = str(uuid.uuid4()) if wait_ack else None
+    debug_id = str(uuid.uuid4()) if opts.debug else None
     
-    if debug:
-        debug_id = str(uuid.uuid4())
-    else:
-        debug_id = None
     job_params = {
         "function_name": function_name,
         "targets": targets,
-        "program": program,
+        "program": opts.program,
         "force": force,
         "params": params or {},
         "wordlist": wordlist,
         "no_trigger": no_trigger,
-        "timeout": timeout,
+        "timeout": opts.timeout,
         "response_id": response_id,
         "debug_id": debug_id
     }
@@ -494,13 +496,13 @@ def console_mode():
 def add_commands(
     type: str = typer.Argument(..., help="Type: domain, ip, website, website_path"),
     item: str = typer.Argument(..., help="Item to add"),
-    program: Optional[str] = program_option,
-    no_trigger: bool = typer.Option(False, "--no-trigger", help="Do not trigger new jobs after processing"),
-    stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin")
+    stdin: bool = typer.Option(False, "--stdin", "-", help="Read items from stdin"),
+    no_trigger: bool = add_options["no_trigger"]
 ):
     """Add reconnaissance assets"""
-    program = get_program(program)
-    if not program:
+    handlers = get_handlers()
+    opts = app.global_options
+    if not opts.program:
         typer.echo("Error: No program specified. Use -p/--program option.")
         raise typer.Exit(1)
 
@@ -514,7 +516,7 @@ def add_commands(
     else:
         items = [item]
 
-    asyncio.run(handlers.handle_add_commands(type, program, items, no_trigger))
+    asyncio.run(handlers.handle_add_commands(type, opts.program, items, no_trigger))
 
 if __name__ == "__main__":
     app()
